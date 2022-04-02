@@ -288,15 +288,17 @@ read_file(istream &fin) {
 }
 
 static inline void search_frame_by_time(const vector<frame> &frames) {
-  while (true) {
-    cout << R"(
+  constexpr auto help = R"(
 Choose search mode.
 > - Earliest frame later than given time.
 < - Latest frame earlier than given time.
 + - Earliest frame not earlier than given time.
 - - Latest frame not later than given time.
 d - Discard.
-)" << endl;
+)";
+  while (true) {
+    cout << help;
+
     char op4 = 'd';
     cin >> op4;
     const auto time_search =
@@ -432,12 +434,9 @@ d - Discard.
  * @retval File stream that reads the corresponding file.
  */
 static inline optional<ifstream> select_file() {
-  while (true) {
-    auto cp = filesystem::current_path();
-    auto di = filesystem::directory_iterator(cp);
-
-    cout << R"(
+  constexpr auto help = R"(
 Choose what to do next.
+h - Show this list.
 d - Show all sub-directories in current directory and change current working directory.
 r - Select a file to read.
 c - Change current working directory.
@@ -445,9 +444,17 @@ w - Show current working directory.
 p - Change current directory to parent directory if there is one.
 q - quit
 )";
+  cout << help;
+  while (true) {
+    auto cp = filesystem::current_path();
+    auto di = filesystem::directory_iterator(cp);
+
     char opt = 'q';
     cin >> opt;
     switch (opt) {
+    case 'h': {
+      cout << help;
+    } break;
     case 'd': {
       size_t i = 0;
       vector<filesystem::directory_entry> entries;
@@ -457,6 +464,10 @@ q - quit
           entries.push_back(entry);
           ++i;
         }
+      if (entries.empty()) {
+        cout << "No sub-directory found." << endl;
+        break;
+      }
       cout << "Directory index(Invalid index to discard): ";
       cin >> i;
       if (i < entries.size())
@@ -978,7 +989,7 @@ u - Unload file.
 )";
   cout << help << endl;
   while (true) {
-    cout << "Please input your command." << endl;
+    cout << "Please input your command here: ";
     char op1 = 'q';
     cin >> op1;
     switch (op1) {
