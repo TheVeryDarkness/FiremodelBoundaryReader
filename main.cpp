@@ -274,9 +274,11 @@ read_file(istream &fin) {
       const auto &info = patches[ip];
       auto _size = info.size();
       CHECK_FORMAT(_size * sizeof(float) == patch_size);
+      auto &data = current[ip].data;
+      data.reserve(_size);
       for (size_t i = 0; i < info.size(); ++i) {
         float val = read_float(fin);
-        current[ip].data.push_back(val);
+        data.push_back(val);
       }
       u32 patch_end = read_uint32(fin);
       CHECK_FORMAT(patch_end == patch_size);
