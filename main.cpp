@@ -9,7 +9,6 @@
 // As for opengl, most of the codes about opengl are adapted from
 // https://github.com/JoeyDeVries/LearnOpenGL.
 #include <array>
-#include <cassert>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -31,8 +30,32 @@
 #endif // GRAPHICS_ENABLED
 
 using namespace std;
+
+class file_error : exception {
+public:
+  const char *what() const noexcept {
+    return "File is not correct. Maybe something unexpected happened when "
+           "running fds.";
+  }
+};
+class stream_error : exception {
+public:
+  const char *what() const noexcept {
+    return "File stream terminated unexpectedly. This is usually because of an "
+           "unexpected EOF.";
+  }
+};
+
+#define CHECK_STREAM(STREAM)                                                   \
+  if (!(STREAM))                                                               \
+    throw stream_error();
+
+#define CHECK_FORMAT(EXPR)                                                     \
+  if (!(EXPR))                                                                 \
+    throw file_error();
+
 template <size_t sz> static inline void read(istream &in, array<char, sz> &s) {
-  assert(in);
+  CHECK_STREAM(in);
   static_assert(sz > 0);
   in.get(s.data(), sz);
 }
@@ -60,7 +83,7 @@ static inline ostream &write_bytes(ostream &out, char c,
 
 template <size_t sz>
 static inline void check(istream &in, const char (&s)[sz]) {
-  assert(in);
+  CHECK_STREAM(in);
   static_assert(sz > 0);
   char buf[sz];
   buf[sz - 1] = 0;
@@ -91,7 +114,7 @@ static inline void write_separated(ostream &o, const char *sep,
 }
 
 template <typename Ty> static inline Ty read_integer(istream &in) {
-  assert(in);
+  CHECK_STREAM(in);
   constexpr auto size = sizeof(Ty);
   char buf[size];
   in.read(buf, size);
@@ -119,15 +142,27 @@ using u64 = std::uint64_t;
 using i32 = std::int32_t;
 using u32 = std::uint32_t;
 struct patch_info {
-  u32 I1;
-  u32 I2;
-  u32 J1;
-  u32 J2;
-  u32 K1;
-  u32 K2;
-  i32 IOR;        // Orientation. 123 stand for XYZ.
-  u32 OBST_INDEX; // Obstruction index
-  u32 NM;         // Mesh index
+  const u32 I1;
+  const u32 I2;
+  const u32 J1;
+  const u32 J2;
+  const u32 K1;
+  const u32 K2;
+  const i32 IOR;        // Orientation. 123 stand for XYZ.
+  const u32 OBST_INDEX; // Obstruction index
+  const u32 NM;         // Mesh index
+  patch_info(u32 I1, u32 I2, u32 J1, u32 J2, u32 K1, u32 K2, i32 IOR,
+             u32 OBST_INDEX, u32 NM)
+      : I1(I1), I2(I2), J1(J1), J2(J2), K1(K1), K2(K2), IOR(IOR),
+        OBST_INDEX(OBST_INDEX), NM(NM) {
+    CHECK_FORMAT(I2 >= I1);
+    CHECK_FORMAT(J2 >= J1);
+    CHECK_FORMAT(K2 >= K1);
+    CHECK_FORMAT(IOR != 0);
+    CHECK_FORMAT(IOR <= 3);
+    CHECK_FORMAT(IOR >= -3);
+  }
+  patch_info(const patch_info &) noexcept = default;
   template <typename Callable> void for_each(Callable &&callable) const {
     callable(I1);
     callable(I2);
@@ -155,23 +190,13 @@ struct patch_info {
     case -3:
       return "-Z";
     default:
-      assert(false);
       return "??";
     }
   }
 
-  u32 I() const noexcept {
-    assert(I2 >= I1);
-    return I2 - I1 + 1;
-  }
-  u32 J() const noexcept {
-    assert(J2 >= J1);
-    return J2 - J1 + 1;
-  }
-  u32 K() const noexcept {
-    assert(K2 >= K1);
-    return K2 - K1 + 1;
-  }
+  u32 I() const noexcept { return I2 - I1 + 1; }
+  u32 J() const noexcept { return J2 - J1 + 1; }
+  u32 K() const noexcept { return K2 - K1 + 1; }
 
   u32 size() const noexcept { return I() * J() * K(); }
   friend ostream &operator<<(ostream &o, const patch_info &patch) {
@@ -248,13 +273,13 @@ read_file(istream &fin) {
       u32 patch_size = read_uint32(fin);
       const auto &info = patches[ip];
       auto _size = info.size();
-      assert(_size * sizeof(float) == patch_size);
+      CHECK_FORMAT(_size * sizeof(float) == patch_size);
       for (size_t i = 0; i < info.size(); ++i) {
         float val = read_float(fin);
         current[ip].data.push_back(val);
       }
       u32 patch_end = read_uint32(fin);
-      assert(patch_end == patch_size);
+      CHECK_FORMAT(patch_end == patch_size);
     }
 
     vals.push_back(frame{stime, std::move(current)});
@@ -413,10 +438,11 @@ static inline optional<ifstream> select_file() {
 
     cout << R"(
 Choose what to do next.
-d - Show all sub-directories in current directory.
+d - Show all sub-directories in current directory and change current working directory.
 r - Select a file to read.
 c - Change current working directory.
 w - Show current working directory.
+p - Change current directory to parent directory if there is one.
 q - quit
 )";
     char opt = 'q';
@@ -424,11 +450,17 @@ q - quit
     switch (opt) {
     case 'd': {
       size_t i = 0;
+      vector<filesystem::directory_entry> entries;
       for (const auto &entry : di)
         if (entry.is_directory()) {
           cout << i << " - " << entry.path().generic_string() << endl;
+          entries.push_back(entry);
           ++i;
         }
+      cout << "Directory index(Invalid index to discard): ";
+      cin >> i;
+      if (i < entries.size())
+        filesystem::current_path(entries[i]);
     } break;
     case 'r': {
       vector<filesystem::path> files;
@@ -474,6 +506,9 @@ q - quit
     case 'w': {
       cout << filesystem::current_path() << endl;
     } break;
+    case 'p': {
+      filesystem::current_path(filesystem::current_path().parent_path());
+    } break;
     case 'q': {
       return {};
     }
@@ -518,7 +553,7 @@ static inline void show_patch(const vector<patch_info> &patches,
     n = patches[p].J();
     break;
   default:
-    assert(false);
+    CHECK_FORMAT(false);
   }
 
   u32 precision = 0;
@@ -564,8 +599,8 @@ static inline float lastFrame = 0.0f;
       clog << *error << endl;                                                  \
   } while (0);
 
+static bool cursor_enabled = false;
 void processInput(GLFWwindow *window) {
-  static bool cursor_enabled = false;
   static bool tab_pressed = false;
   if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
     glfwSetWindowShouldClose(window, true);
@@ -573,8 +608,8 @@ void processInput(GLFWwindow *window) {
     if (!tab_pressed) {
       cursor_enabled = !cursor_enabled;
       glfwSetInputMode(window, GLFW_CURSOR,
-                       cursor_enabled ? GLFW_CURSOR_DISABLED
-                                      : GLFW_CURSOR_NORMAL);
+                       cursor_enabled ? GLFW_CURSOR_NORMAL
+                                      : GLFW_CURSOR_DISABLED);
     }
     tab_pressed = true;
   } else
@@ -586,6 +621,9 @@ void onFramebufferSizeChange(GLFWwindow *window, int width, int height) {
 }
 
 void onMouseMove(GLFWwindow *window, double xposIn, double yposIn) {
+  if (cursor_enabled)
+    return;
+
   float xpos = static_cast<float>(xposIn);
   float ypos = static_cast<float>(yposIn);
   static bool firstMouse = true;
@@ -620,9 +658,14 @@ void onMouseMove(GLFWwindow *window, double xposIn, double yposIn) {
 }
 
 void onScroll(GLFWwindow *window, double xoffset, double yoffset) {
-  GLfloat dx = xoffset;
-  GLfloat dy = yoffset;
-  cameraPos += cameraFront * dy;
+  static GLfloat rate = 1;
+  if (cursor_enabled) {
+    rate *= (GLfloat)exp2(yoffset);
+  } else {
+    GLfloat dx = (GLfloat)xoffset * rate;
+    GLfloat dy = (GLfloat)yoffset * rate;
+    cameraPos += cameraFront * dy;
+  }
 }
 
 auto vertexShaderSource =
@@ -646,9 +689,9 @@ void main() {
 )";
 
 static inline int show_patch_position(const vector<patch_info> &patches) {
-
-  const unsigned int SCR_WIDTH = 800;
-  const unsigned int SCR_HEIGHT = 600;
+  bool wireframe = true;
+  GLuint screenWidth = 800;
+  GLuint screenHeight = 600;
 
   glfwInit();
   glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -659,7 +702,7 @@ static inline int show_patch_position(const vector<patch_info> &patches) {
 #endif
 
   GLFWwindow *window =
-      glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "LearnOpenGL", NULL, NULL);
+      glfwCreateWindow(screenWidth, screenHeight, "BoundaryReader", NULL, NULL);
   if (window == NULL) {
     cout << "Failed to create GLFW window." << endl;
     glfwTerminate();
@@ -726,29 +769,87 @@ static inline int show_patch_position(const vector<patch_info> &patches) {
   vector<GLuint> vertices = {};
   vector<GLuint> indices = {};
   for (const auto &patch : patches) {
-    const GLuint N = vertices.size() / 3;
-    indices.push_back(N);
-    indices.push_back(N + 1);
-    indices.push_back(N + 2);
-
-    indices.push_back(N + 2);
-    indices.push_back(N + 3);
-    indices.push_back(N);
+    const GLuint N = (GLuint)vertices.size() / 3;
+    if (wireframe) {
+      switch (patch.IOR) {
+      case 1:
+      case -1:
+        indices.push_back(N + 0);
+        indices.push_back(N + 1);
+        indices.push_back(N + 1);
+        indices.push_back(N + 3);
+        indices.push_back(N + 3);
+        indices.push_back(N + 2);
+        indices.push_back(N + 2);
+        indices.push_back(N + 0);
+        break;
+      case 2:
+      case -2:
+        indices.push_back(N + 0);
+        indices.push_back(N + 2);
+        indices.push_back(N + 2);
+        indices.push_back(N + 1);
+        indices.push_back(N + 1);
+        indices.push_back(N + 3);
+        indices.push_back(N + 3);
+        indices.push_back(N + 0);
+        break;
+      case 3:
+      case -3:
+        indices.push_back(N + 0);
+        indices.push_back(N + 1);
+        indices.push_back(N + 1);
+        indices.push_back(N + 2);
+        indices.push_back(N + 2);
+        indices.push_back(N + 3);
+        indices.push_back(N + 3);
+        indices.push_back(N + 0);
+        break;
+      default:
+        break;
+      }
+    } else {
+      indices.push_back(N + 0);
+      indices.push_back(N + 1);
+      indices.push_back(N + 2);
+      switch (patch.IOR) {
+      case 1:
+      case -1:
+        indices.push_back(N + 1);
+        indices.push_back(N + 2);
+        indices.push_back(N + 3);
+        break;
+      case 2:
+      case -2:
+        indices.push_back(N + 0);
+        indices.push_back(N + 1);
+        indices.push_back(N + 3);
+        break;
+      case 3:
+      case -3:
+        indices.push_back(N + 0);
+        indices.push_back(N + 2);
+        indices.push_back(N + 3);
+        break;
+      default:
+        break;
+      }
+    }
 
     vertices.push_back(patch.I1);
     vertices.push_back(patch.J1);
     vertices.push_back(patch.K1);
 
-    vertices.push_back(patch.I1);
-    vertices.push_back(patch.J2);
+    vertices.push_back(patch.I2);
+    vertices.push_back(patch.J1);
     vertices.push_back(patch.K2);
 
     vertices.push_back(patch.I2);
     vertices.push_back(patch.J2);
     vertices.push_back(patch.K1);
 
-    vertices.push_back(patch.I2);
-    vertices.push_back(patch.J1);
+    vertices.push_back(patch.I1);
+    vertices.push_back(patch.J2);
     vertices.push_back(patch.K2);
   }
 
@@ -783,16 +884,31 @@ static inline int show_patch_position(const vector<patch_info> &patches) {
 
   DETECT_ERROR;
 
-  glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-
-  DETECT_ERROR;
-
   glUseProgram(shaderProgram);
 
   DETECT_ERROR;
 
+  constexpr auto u32_max = numeric_limits<u32>::max();
+  u32 I1 = u32_max, I2 = 0, J1 = u32_max, J2 = 0, K1 = u32_max, K2 = 0;
+  for (const auto &patch : patches) {
+    I1 = min(patch.I1, I1);
+    I2 = max(patch.I2, I2);
+    J1 = min(patch.I1, J1);
+    J2 = max(patch.I1, J2);
+    K1 = min(patch.I1, K1);
+    K2 = max(patch.I1, K2);
+  }
+  float far = 100.;
+  if (patches.size() > 0) {
+    u32 I, J, K;
+    I = I2 - I1;
+    J = J2 - J1;
+    K = K2 - K1;
+    far = float(sqrt(I * I + J * J + K * K) * 2);
+  }
+
   glm::mat4 projection = glm::perspective(
-      glm::radians(45.0f), float(SCR_WIDTH / SCR_HEIGHT), 0.1f, 100.0f);
+      glm::radians(60.0f), float(screenWidth) / screenHeight, 0.1f, far);
 
   glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "projection"), 1,
                      false, glm::value_ptr(projection));
@@ -815,7 +931,10 @@ static inline int show_patch_position(const vector<patch_info> &patches) {
 
     glUseProgram(shaderProgram);
     glBindVertexArray(VAO);
-    glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0);
+    if (wireframe)
+      glDrawElements(GL_LINES, (GLuint)indices.size(), GL_UNSIGNED_INT, 0);
+    else
+      glDrawElements(GL_TRIANGLES, (GLuint)indices.size(), GL_UNSIGNED_INT, 0);
 
     glfwSwapBuffers(window);
     glfwPollEvents();
@@ -918,8 +1037,8 @@ u - Unload file.
 }
 
 int main(int argc, char *argv[]) {
-  try {
-    while (true) {
+  while (true) {
+    try {
       cerr << hex;
 
       auto in = select_file();
@@ -940,10 +1059,10 @@ int main(int argc, char *argv[]) {
       bool quitting = process_file(label, bar_label, units, patches, frames);
       if (quitting)
         return 0;
+
+    } catch (const exception &e) {
+      cerr << "Exception caught: " << e.what() << endl;
     }
-  } catch (const exception &e) {
-    cerr << e.what() << endl;
-    return -1;
   }
 
   return 0;
