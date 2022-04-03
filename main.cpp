@@ -339,6 +339,7 @@ d - Discard.
     case 'd':
       return;
     default:
+      cout << "Option not found." << endl;
       break;
     }
   }
@@ -372,6 +373,7 @@ d - discard.
     case 'd':
       return;
     default:
+      cout << "Option not found." << endl;
       break;
     }
   }
@@ -401,6 +403,7 @@ d - discard.
     case 'd':
       return;
     default:
+      cout << "Option not found." << endl;
       break;
     }
   }
@@ -427,6 +430,7 @@ d - Discard.
     case 'd':
       return;
     default:
+      cout << "Option not found." << endl;
       break;
     }
   }
@@ -455,9 +459,6 @@ q - quit
     char opt = 'q';
     cin >> opt;
     switch (opt) {
-    case 'h': {
-      cout << help;
-    } break;
     case 'd': {
       size_t i = 0;
       vector<filesystem::directory_entry> entries;
@@ -527,7 +528,10 @@ q - quit
       return {};
     }
     default:
-      break;
+      cout << "Command not found." << endl;
+    case 'h': {
+      cout << help;
+    } break;
     }
   }
 }
@@ -830,6 +834,7 @@ Scroll to modify the scroll sensity when cursor is enabled.
       case 'd':
         return 0;
       default:
+        cout << "Option not found." << endl;
         break;
       }
     }
