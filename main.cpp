@@ -451,6 +451,7 @@ q - quit
     auto cp = filesystem::current_path();
     auto di = filesystem::directory_iterator(cp);
 
+    cout << "Please input your command here: ";
     char opt = 'q';
     cin >> opt;
     switch (opt) {
@@ -613,10 +614,13 @@ static inline float lastFrame = 0.0f;
   } while (0);
 
 static bool cursor_enabled = false;
+GLuint current = 0;
+vector<GLuint> highlight;
 void processInput(GLFWwindow *window) {
-  static bool tab_pressed = false;
   if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
     glfwSetWindowShouldClose(window, true);
+
+  static bool tab_pressed = false;
   if (glfwGetKey(window, GLFW_KEY_TAB) == GLFW_PRESS) {
     if (!tab_pressed) {
       cursor_enabled = !cursor_enabled;
@@ -627,6 +631,34 @@ void processInput(GLFWwindow *window) {
     tab_pressed = true;
   } else
     tab_pressed = false;
+
+  static bool left_pressed = false;
+  if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) {
+    if (!left_pressed) {
+      current = min(current, (GLuint)highlight.size());
+      if (current < highlight.size())
+        highlight[current] &= ~0b10;
+      if (current > 0)
+        --current;
+      highlight[current] |= 0b10;
+    }
+    left_pressed = true;
+  } else
+    left_pressed = false;
+
+  static bool right_pressed = false;
+  if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
+    if (!right_pressed) {
+      if (current < highlight.size()) {
+        highlight[current] &= ~0b10;
+        ++current;
+      }
+      if (current < highlight.size())
+        highlight[current] |= 0b10;
+    }
+    right_pressed = true;
+  } else
+    right_pressed = false;
 }
 
 void onFramebufferSizeChange(GLFWwindow *window, int width, int height) {
@@ -634,8 +666,6 @@ void onFramebufferSizeChange(GLFWwindow *window, int width, int height) {
 }
 
 void onMouseMove(GLFWwindow *window, double xposIn, double yposIn) {
-  if (cursor_enabled)
-    return;
 
   float xpos = static_cast<float>(xposIn);
   float ypos = static_cast<float>(yposIn);
@@ -654,6 +684,9 @@ void onMouseMove(GLFWwindow *window, double xposIn, double yposIn) {
   float yoffset = lastY - ypos;
   lastX = xpos;
   lastY = ypos;
+
+  if (cursor_enabled)
+    return;
 
   float sensitivity = 0.01f; // change this value to your liking
   xoffset *= sensitivity;
@@ -685,37 +718,93 @@ auto vertexShaderSource =
     R"(
 #version 330 core
 layout (location = 0) in vec3 aPos;
+layout (location = 1) in uint aHighlight;
 
 uniform mat4 projection;
 uniform mat4 view;
 
+out vec4 color;
+
 void main() {
  gl_Position = projection * view * vec4(aPos.x, aPos.y, aPos.z, 1.0);
+ if (aHighlight >= 2) {
+  color = vec4(1.0f, 0.4f, 0.4f, 0.6f);
+ } else if (aHighlight == 1) {
+  color = vec4(0.4f, 1.0f, 0.4f, 0.6f);
+ } else {
+  color = vec4(.4f, .4f, .4f, 0.6f);
+  //color = vec4(.0f, .0f, .0f, 0.6f);
+ }
 }
 )";
 auto fragmentShaderSource = R"(
 #version 330 core
-out vec4 FragColor;
+
+in vec4 color;
+
 void main() {
- FragColor = vec4(1.0f, 1.0f, 1.0f, 0.6f);
+ gl_FragColor = color;
 }
 )";
 
-static inline int show_patch_position(const vector<patch_info> &patches) {
-  bool wireframe = true;
-  GLuint screenWidth = 800;
-  GLuint screenHeight = 600;
+static inline int visualize_patch(const vector<patch_info> &patches) {
+  static bool wireframe = true;
+  static GLuint windowWidth = 800;
+  static GLuint windowHeight = 600;
+  highlight.resize(patches.size(), 0);
+
+  bool start = false;
+  while (!start) {
+    cout << "Settings:" << endl
+         << "f - Display as wireframe:    " << wireframe << endl
+         << "w - Window width:            " << windowWidth << endl
+         << "h - Window height:           " << windowHeight << endl
+         << "l - Current hilightes patch: " << current << endl
+         << "g - Start patch visualiztion." << endl
+         << "d - Discard." << endl;
+    char opt = 'd';
+    cin >> opt;
+    switch (opt) {
+    case 'f': {
+      cout << "Display as wireframe: ";
+      cin >> wireframe;
+    } break;
+    case 'w': {
+      cout << "Window width: ";
+      cin >> windowWidth;
+    } break;
+    case 'h': {
+      cout << "Window height: ";
+      cin >> windowHeight;
+    } break;
+    case 'l': {
+      cout << "Highlighted patch: ";
+      cin >> current;
+    } break;
+    case 'g': {
+      start = true;
+    } break;
+    case 'd':
+      return 0;
+    default:
+      break;
+    }
+  }
 
   glfwInit();
-  glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+  glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
   glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
   glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 #ifdef __APPLE__
   glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 #endif
 
+#ifndef NDEBUG
+  glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, GL_TRUE);
+#endif // !NDEBUG
+
   GLFWwindow *window =
-      glfwCreateWindow(screenWidth, screenHeight, "BoundaryReader", NULL, NULL);
+      glfwCreateWindow(windowWidth, windowHeight, "BoundaryReader", NULL, NULL);
   if (window == NULL) {
     cout << "Failed to create GLFW window." << endl;
     glfwTerminate();
@@ -731,6 +820,90 @@ static inline int show_patch_position(const vector<patch_info> &patches) {
   if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
     cout << "Failed to initialize GLAD" << endl;
     return -1;
+  }
+
+  int flags;
+  glGetIntegerv(GL_CONTEXT_FLAGS, &flags);
+  if (flags & GL_CONTEXT_FLAG_DEBUG_BIT) {
+    glEnable(GL_DEBUG_OUTPUT);
+    glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
+    glDebugMessageCallback(
+        [](GLenum source, GLenum type, unsigned int id, GLenum severity,
+           GLsizei length, const char *message, const void *userParam) {
+          clog << "Debug message (" << id << "): " << message << endl;
+
+          switch (source) {
+          case GL_DEBUG_SOURCE_API:
+            clog << "Source: API";
+            break;
+          case GL_DEBUG_SOURCE_WINDOW_SYSTEM:
+            clog << "Source: Window System";
+            break;
+          case GL_DEBUG_SOURCE_SHADER_COMPILER:
+            clog << "Source: Shader Compiler";
+            break;
+          case GL_DEBUG_SOURCE_THIRD_PARTY:
+            clog << "Source: Third Party";
+            break;
+          case GL_DEBUG_SOURCE_APPLICATION:
+            clog << "Source: Application";
+            break;
+          case GL_DEBUG_SOURCE_OTHER:
+            clog << "Source: Other";
+            break;
+          }
+          std::cout << std::endl;
+
+          switch (type) {
+          case GL_DEBUG_TYPE_ERROR:
+            clog << "Type: Error";
+            break;
+          case GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR:
+            clog << "Type: Deprecated Behaviour";
+            break;
+          case GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR:
+            clog << "Type: Undefined Behaviour";
+            break;
+          case GL_DEBUG_TYPE_PORTABILITY:
+            clog << "Type: Portability";
+            break;
+          case GL_DEBUG_TYPE_PERFORMANCE:
+            clog << "Type: Performance";
+            break;
+          case GL_DEBUG_TYPE_MARKER:
+            clog << "Type: Marker";
+            break;
+          case GL_DEBUG_TYPE_PUSH_GROUP:
+            clog << "Type: Push Group";
+            break;
+          case GL_DEBUG_TYPE_POP_GROUP:
+            clog << "Type: Pop Group";
+            break;
+          case GL_DEBUG_TYPE_OTHER:
+            clog << "Type: Other";
+            break;
+          }
+          clog << endl;
+
+          switch (severity) {
+          case GL_DEBUG_SEVERITY_HIGH:
+            clog << "Severity: high";
+            break;
+          case GL_DEBUG_SEVERITY_MEDIUM:
+            clog << "Severity: medium";
+            break;
+          case GL_DEBUG_SEVERITY_LOW:
+            clog << "Severity: low";
+            break;
+          case GL_DEBUG_SEVERITY_NOTIFICATION:
+            clog << "Severity: notification";
+            break;
+          }
+          clog << endl << endl;
+        },
+        nullptr);
+    glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr,
+                          GL_TRUE);
   }
 
   glEnable(GL_DEPTH_TEST);
@@ -866,17 +1039,40 @@ static inline int show_patch_position(const vector<patch_info> &patches) {
     vertices.push_back(patch.K2);
   }
 
-  GLuint VBO, VAO, EBO;
+  size_t i = 0;
+  for (const auto &patch : patches) {
+    vertices.push_back(1);
+    vertices.push_back(1);
+    vertices.push_back(1);
+    vertices.push_back(1);
+  }
+
+  GLuint VBO[2], VAO, EBO;
   glGenVertexArrays(1, &VAO);
-  glGenBuffers(1, &VBO);
+  glGenBuffers(2, VBO);
   glGenBuffers(1, &EBO);
+
+  DETECT_ERROR;
 
   glBindVertexArray(VAO);
 
-  glBindBuffer(GL_ARRAY_BUFFER, VBO);
+  DETECT_ERROR;
+
+  glBindBuffer(GL_ARRAY_BUFFER, VBO[0]);
   glBufferData(GL_ARRAY_BUFFER,
                vertices.size() * sizeof(decltype(vertices)::value_type),
                vertices.data(), GL_STATIC_DRAW);
+
+  glVertexAttribPointer(0, 3, GL_UNSIGNED_INT, GL_FALSE, 3 * sizeof(GLuint), 0);
+  DETECT_ERROR;
+
+  glBindBuffer(GL_ARRAY_BUFFER, VBO[1]);
+  glBufferData(GL_ARRAY_BUFFER,
+               highlight.size() * sizeof(decltype(highlight)::value_type),
+               highlight.data(), GL_DYNAMIC_DRAW);
+
+  glVertexAttribPointer(1, 1, GL_UNSIGNED_INT, GL_FALSE, 1 * sizeof(GLuint), 0);
+  DETECT_ERROR;
 
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
   glBufferData(GL_ELEMENT_ARRAY_BUFFER,
@@ -885,15 +1081,33 @@ static inline int show_patch_position(const vector<patch_info> &patches) {
 
   DETECT_ERROR;
 
-  glVertexAttribPointer(0, 3, GL_UNSIGNED_INT, GL_FALSE, 3 * sizeof(GLuint),
-                        (void *)0);
   glEnableVertexAttribArray(0);
+  glEnableVertexAttribArray(1);
 
   DETECT_ERROR;
 
   glBindBuffer(GL_ARRAY_BUFFER, 0);
-
   glBindVertexArray(0);
+
+  DETECT_ERROR;
+
+  /*
+  glBindVertexBuffer(VAO, VBO[0], 0, sizeof(GLuint) * 3);
+  DETECT_ERROR;
+  glVertexAttribFormat(VAO, 3, GL_UNSIGNED_INT, GL_FALSE, 0);
+  DETECT_ERROR;
+  glVertexAttribBinding(VAO, 0);
+
+  DETECT_ERROR;
+
+  glBindVertexBuffer(VAO, VBO[1], 0, sizeof(GLuint));
+  DETECT_ERROR;
+  glVertexAttribFormat(VAO, 1, GL_UNSIGNED_INT, GL_FALSE, 0);
+  DETECT_ERROR;
+  glVertexAttribBinding(VAO, 1);
+
+  DETECT_ERROR;
+  */
 
   DETECT_ERROR;
 
@@ -921,7 +1135,7 @@ static inline int show_patch_position(const vector<patch_info> &patches) {
   }
 
   glm::mat4 projection = glm::perspective(
-      glm::radians(60.0f), float(screenWidth) / screenHeight, 0.1f, far);
+      glm::radians(60.0f), float(windowWidth) / windowHeight, 0.1f, far);
 
   glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "projection"), 1,
                      false, glm::value_ptr(projection));
@@ -950,7 +1164,8 @@ static inline int show_patch_position(const vector<patch_info> &patches) {
       glDrawElements(GL_TRIANGLES, (GLuint)indices.size(), GL_UNSIGNED_INT, 0);
 
     glfwSwapBuffers(window);
-    glfwPollEvents();
+    // glfwPollEvents();
+    glfwWaitEvents();
 
     DETECT_ERROR;
   }
@@ -958,10 +1173,11 @@ static inline int show_patch_position(const vector<patch_info> &patches) {
   DETECT_ERROR;
 
   glDeleteVertexArrays(1, &VAO);
-  glDeleteBuffers(1, &VBO);
+  glDeleteBuffers(2, VBO);
   glDeleteProgram(shaderProgram);
 
   glfwTerminate();
+  cout << "Visualization trerminated." << endl;
   return 0;
 }
 #endif // GRAPHICS_ENABLED
@@ -1017,7 +1233,7 @@ u - Unload file.
     } break;
 #if GRAPHICS_ENABLED
     case 'g':
-      show_patch_position(patches);
+      visualize_patch(patches);
       break;
 #endif // GRAPHICS_ENABLED
     case 'p': {
