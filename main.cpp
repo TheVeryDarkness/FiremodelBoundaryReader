@@ -615,56 +615,64 @@ static inline float lastFrame = 0.0f;
 
 static bool cursor_enabled = false;
 GLuint current = 0;
-vector<GLuint> highlight;
-void processInput(GLFWwindow *window) {
-  if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
-    glfwSetWindowShouldClose(window, true);
+vector<GLuint> highlighted;
 
-  static bool tab_pressed = false;
-  if (glfwGetKey(window, GLFW_KEY_TAB) == GLFW_PRESS) {
-    if (!tab_pressed) {
+void highlight(size_t i) {
+  if (4 * i < highlighted.size()) {
+    highlighted[4 * i + 0] |= 0b10;
+    highlighted[4 * i + 1] |= 0b10;
+    highlighted[4 * i + 2] |= 0b10;
+    highlighted[4 * i + 3] |= 0b10;
+  }
+}
+void unhighlight(size_t i) {
+  if (4 * i < highlighted.size()) {
+    highlighted[4 * i + 0] &= ~(GLuint)0b10;
+    highlighted[4 * i + 1] &= ~(GLuint)0b10;
+    highlighted[4 * i + 2] &= ~(GLuint)0b10;
+    highlighted[4 * i + 3] &= ~(GLuint)0b10;
+  }
+}
+
+static inline void onKey(GLFWwindow *window, int key, int scancode, int action,
+                         int mods) {
+  if (key == GLFW_KEY_ESCAPE)
+    if (action == GLFW_PRESS)
+      glfwSetWindowShouldClose(window, true);
+
+  if (key == GLFW_KEY_TAB)
+    if (action == GLFW_PRESS) {
       cursor_enabled = !cursor_enabled;
       glfwSetInputMode(window, GLFW_CURSOR,
                        cursor_enabled ? GLFW_CURSOR_NORMAL
                                       : GLFW_CURSOR_DISABLED);
     }
-    tab_pressed = true;
-  } else
-    tab_pressed = false;
 
-  static bool left_pressed = false;
-  if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) {
-    if (!left_pressed) {
-      current = min(current, (GLuint)highlight.size());
-      if (current < highlight.size())
-        highlight[current] &= ~0b10;
+  static bool continuous = mods & GLFW_MOD_CAPS_LOCK;
+
+  if (key == GLFW_KEY_LEFT)
+    if (action == GLFW_PRESS || (continuous && action == GLFW_REPEAT)) {
+      unhighlight(current);
       if (current > 0)
         --current;
-      highlight[current] |= 0b10;
+      highlight(current);
     }
-    left_pressed = true;
-  } else
-    left_pressed = false;
 
-  static bool right_pressed = false;
-  if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
-    if (!right_pressed) {
-      if (current < highlight.size()) {
-        highlight[current] &= ~0b10;
+  if (key == GLFW_KEY_RIGHT)
+    if (action == GLFW_PRESS || (continuous && action == GLFW_REPEAT)) {
+      unhighlight(current);
+      if (current * 4 < highlighted.size()) {
         ++current;
       }
-      if (current < highlight.size())
-        highlight[current] |= 0b10;
+      highlight(current);
     }
-    right_pressed = true;
-  } else
-    right_pressed = false;
 }
 
 void onFramebufferSizeChange(GLFWwindow *window, int width, int height) {
   glViewport(0, 0, width, height);
 }
 
+static GLfloat sensitivity = 0.01f;
 void onMouseMove(GLFWwindow *window, double xposIn, double yposIn) {
 
   float xpos = static_cast<float>(xposIn);
@@ -688,7 +696,6 @@ void onMouseMove(GLFWwindow *window, double xposIn, double yposIn) {
   if (cursor_enabled)
     return;
 
-  float sensitivity = 0.01f; // change this value to your liking
   xoffset *= sensitivity;
   yoffset *= sensitivity;
 
@@ -703,8 +710,8 @@ void onMouseMove(GLFWwindow *window, double xposIn, double yposIn) {
   cameraFront /= glm::length(cameraFront);
 }
 
+static GLfloat rate = 1;
 void onScroll(GLFWwindow *window, double xoffset, double yoffset) {
-  static GLfloat rate = 1;
   if (cursor_enabled) {
     rate *= (GLfloat)exp2(yoffset);
   } else {
@@ -728,12 +735,11 @@ out vec4 color;
 void main() {
  gl_Position = projection * view * vec4(aPos.x, aPos.y, aPos.z, 1.0);
  if (aHighlight >= 2) {
-  color = vec4(1.0f, 0.4f, 0.4f, 0.6f);
+  color = vec4(.8f, .1f, .0f, .8f);
  } else if (aHighlight == 1) {
-  color = vec4(0.4f, 1.0f, 0.4f, 0.6f);
+  color = vec4(.1f, .8f, .0f, .8f);
  } else {
-  color = vec4(.4f, .4f, .4f, 0.6f);
-  //color = vec4(.0f, .0f, .0f, 0.6f);
+  color = vec4(.8f, .8f, .8f, .2f);
  }
 }
 )";
@@ -748,437 +754,456 @@ void main() {
 )";
 
 static inline int visualize_patch(const vector<patch_info> &patches) {
-  static bool wireframe = true;
+  static bool wireframe = false;
   static GLuint windowWidth = 800;
   static GLuint windowHeight = 600;
-  highlight.resize(patches.size(), 0);
 
-  bool start = false;
-  while (!start) {
-    cout << "Settings:" << endl
-         << "f - Display as wireframe:    " << wireframe << endl
-         << "w - Window width:            " << windowWidth << endl
-         << "h - Window height:           " << windowHeight << endl
-         << "l - Current hilightes patch: " << current << endl
-         << "g - Start patch visualiztion." << endl
-         << "d - Discard." << endl;
-    char opt = 'd';
-    cin >> opt;
-    switch (opt) {
-    case 'f': {
-      cout << "Display as wireframe: ";
-      cin >> wireframe;
-    } break;
-    case 'w': {
-      cout << "Window width: ";
-      cin >> windowWidth;
-    } break;
-    case 'h': {
-      cout << "Window height: ";
-      cin >> windowHeight;
-    } break;
-    case 'l': {
-      cout << "Highlighted patch: ";
-      cin >> current;
-    } break;
-    case 'g': {
-      start = true;
-    } break;
-    case 'd':
-      return 0;
-    default:
-      break;
-    }
+  highlighted.resize(patches.size() * 4, 0);
+  if (current > patches.size()) {
+    current = 0;
   }
+  highlight(current);
 
-  glfwInit();
-  glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-  glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-  glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+  while (true) {
+
+    bool start = false;
+    while (!start) {
+      cout << "When in graphics mode, press TAB to enable or disable cursor, "
+              "CAPS to enable continuous key input."
+           << endl
+           << "Settings:" << endl
+           << "f - Display as wireframe: " << wireframe << endl
+           << "w - Window width:         " << windowWidth << endl
+           << "h - Window height:        " << windowHeight << endl
+           << "c - Current patch:        " << current << endl
+           << "m - Mouse move sensity:   " << rate << endl
+           << "s - Scroll sensity:       " << rate << endl
+           << "Options:" << endl
+           << "g - Start patch visualiztion." << endl
+           << "d - Discard." << endl;
+      char opt = 'd';
+      cin >> opt;
+      switch (opt) {
+      case 'f': {
+        cout << "Display as wireframe: ";
+        cin >> wireframe;
+      } break;
+      case 'w': {
+        cout << "Window width: ";
+        cin >> windowWidth;
+      } break;
+      case 'h': {
+        cout << "Window height: ";
+        cin >> windowHeight;
+      } break;
+      case 'c': {
+        cout << "Current patch: ";
+        cin >> current;
+      } break;
+      case 's': {
+        cout << "Scroll sensity: ";
+        cin >> rate;
+      } break;
+      case 'm': {
+        cout << "Mouse move sensity: ";
+        cin >> sensitivity;
+      } break;
+      case 'g': {
+        start = true;
+      } break;
+      case 'd':
+        return 0;
+      default:
+        break;
+      }
+    }
+
+    glfwInit();
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 #ifdef __APPLE__
-  glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 #endif
 
 #ifndef NDEBUG
-  glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, GL_TRUE);
+    glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, GL_TRUE);
 #endif // !NDEBUG
 
-  GLFWwindow *window =
-      glfwCreateWindow(windowWidth, windowHeight, "BoundaryReader", NULL, NULL);
-  if (window == NULL) {
-    cout << "Failed to create GLFW window." << endl;
-    glfwTerminate();
-    return -1;
-  }
-  glfwMakeContextCurrent(window);
-  glfwSetFramebufferSizeCallback(window, onFramebufferSizeChange);
-  glfwSetCursorPosCallback(window, onMouseMove);
-  glfwSetScrollCallback(window, onScroll);
+    GLFWwindow *window = glfwCreateWindow(windowWidth, windowHeight,
+                                          "BoundaryReader", NULL, NULL);
+    if (window == NULL) {
+      cout << "Failed to create GLFW window." << endl;
+      glfwTerminate();
+      return -1;
+    }
+    glfwMakeContextCurrent(window);
+    glfwSetInputMode(window, GLFW_LOCK_KEY_MODS, GLFW_TRUE);
+    glfwSetKeyCallback(window, onKey);
+    glfwSetFramebufferSizeCallback(window, onFramebufferSizeChange);
+    glfwSetCursorPosCallback(window, onMouseMove);
+    glfwSetScrollCallback(window, onScroll);
 
-  glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
-  if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
-    cout << "Failed to initialize GLAD" << endl;
-    return -1;
-  }
-
-  int flags;
-  glGetIntegerv(GL_CONTEXT_FLAGS, &flags);
-  if (flags & GL_CONTEXT_FLAG_DEBUG_BIT) {
-    glEnable(GL_DEBUG_OUTPUT);
-    glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
-    glDebugMessageCallback(
-        [](GLenum source, GLenum type, unsigned int id, GLenum severity,
-           GLsizei length, const char *message, const void *userParam) {
-          clog << "Debug message (" << id << "): " << message << endl;
-
-          switch (source) {
-          case GL_DEBUG_SOURCE_API:
-            clog << "Source: API";
-            break;
-          case GL_DEBUG_SOURCE_WINDOW_SYSTEM:
-            clog << "Source: Window System";
-            break;
-          case GL_DEBUG_SOURCE_SHADER_COMPILER:
-            clog << "Source: Shader Compiler";
-            break;
-          case GL_DEBUG_SOURCE_THIRD_PARTY:
-            clog << "Source: Third Party";
-            break;
-          case GL_DEBUG_SOURCE_APPLICATION:
-            clog << "Source: Application";
-            break;
-          case GL_DEBUG_SOURCE_OTHER:
-            clog << "Source: Other";
-            break;
-          }
-          std::cout << std::endl;
-
-          switch (type) {
-          case GL_DEBUG_TYPE_ERROR:
-            clog << "Type: Error";
-            break;
-          case GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR:
-            clog << "Type: Deprecated Behaviour";
-            break;
-          case GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR:
-            clog << "Type: Undefined Behaviour";
-            break;
-          case GL_DEBUG_TYPE_PORTABILITY:
-            clog << "Type: Portability";
-            break;
-          case GL_DEBUG_TYPE_PERFORMANCE:
-            clog << "Type: Performance";
-            break;
-          case GL_DEBUG_TYPE_MARKER:
-            clog << "Type: Marker";
-            break;
-          case GL_DEBUG_TYPE_PUSH_GROUP:
-            clog << "Type: Push Group";
-            break;
-          case GL_DEBUG_TYPE_POP_GROUP:
-            clog << "Type: Pop Group";
-            break;
-          case GL_DEBUG_TYPE_OTHER:
-            clog << "Type: Other";
-            break;
-          }
-          clog << endl;
-
-          switch (severity) {
-          case GL_DEBUG_SEVERITY_HIGH:
-            clog << "Severity: high";
-            break;
-          case GL_DEBUG_SEVERITY_MEDIUM:
-            clog << "Severity: medium";
-            break;
-          case GL_DEBUG_SEVERITY_LOW:
-            clog << "Severity: low";
-            break;
-          case GL_DEBUG_SEVERITY_NOTIFICATION:
-            clog << "Severity: notification";
-            break;
-          }
-          clog << endl << endl;
-        },
-        nullptr);
-    glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr,
-                          GL_TRUE);
-  }
-
-  glEnable(GL_DEPTH_TEST);
-
-  DETECT_ERROR;
-
-  int success;
-  char infoLog[512];
-
-  auto vertexShader = glCreateShader(GL_VERTEX_SHADER);
-  glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
-  glCompileShader(vertexShader);
-
-  glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
-  if (!success) {
-    glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
-    cerr << infoLog << endl;
-  }
-
-  auto fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-  glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
-  glCompileShader(fragmentShader);
-
-  glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success);
-  if (!success) {
-    glGetShaderInfoLog(fragmentShader, 512, NULL, infoLog);
-    cerr << infoLog << endl;
-  }
-
-  DETECT_ERROR;
-
-  // link shaders
-  auto shaderProgram = glCreateProgram();
-  glAttachShader(shaderProgram, vertexShader);
-  glAttachShader(shaderProgram, fragmentShader);
-  glLinkProgram(shaderProgram);
-
-  // check for linking errors
-  glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
-  if (!success) {
-    glGetProgramInfoLog(shaderProgram, 512, NULL, infoLog);
-    cerr << infoLog << endl;
-  }
-  glDeleteShader(vertexShader);
-  glDeleteShader(fragmentShader);
-
-  DETECT_ERROR;
-
-  vector<GLuint> vertices = {};
-  vector<GLuint> indices = {};
-  for (const auto &patch : patches) {
-    const GLuint N = (GLuint)vertices.size() / 3;
-    if (wireframe) {
-      switch (patch.IOR) {
-      case 1:
-      case -1:
-        indices.push_back(N + 0);
-        indices.push_back(N + 1);
-        indices.push_back(N + 1);
-        indices.push_back(N + 3);
-        indices.push_back(N + 3);
-        indices.push_back(N + 2);
-        indices.push_back(N + 2);
-        indices.push_back(N + 0);
-        break;
-      case 2:
-      case -2:
-        indices.push_back(N + 0);
-        indices.push_back(N + 2);
-        indices.push_back(N + 2);
-        indices.push_back(N + 1);
-        indices.push_back(N + 1);
-        indices.push_back(N + 3);
-        indices.push_back(N + 3);
-        indices.push_back(N + 0);
-        break;
-      case 3:
-      case -3:
-        indices.push_back(N + 0);
-        indices.push_back(N + 1);
-        indices.push_back(N + 1);
-        indices.push_back(N + 2);
-        indices.push_back(N + 2);
-        indices.push_back(N + 3);
-        indices.push_back(N + 3);
-        indices.push_back(N + 0);
-        break;
-      default:
-        break;
-      }
-    } else {
-      indices.push_back(N + 0);
-      indices.push_back(N + 1);
-      indices.push_back(N + 2);
-      switch (patch.IOR) {
-      case 1:
-      case -1:
-        indices.push_back(N + 1);
-        indices.push_back(N + 2);
-        indices.push_back(N + 3);
-        break;
-      case 2:
-      case -2:
-        indices.push_back(N + 0);
-        indices.push_back(N + 1);
-        indices.push_back(N + 3);
-        break;
-      case 3:
-      case -3:
-        indices.push_back(N + 0);
-        indices.push_back(N + 2);
-        indices.push_back(N + 3);
-        break;
-      default:
-        break;
-      }
+    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
+      cout << "Failed to initialize GLAD" << endl;
+      return -1;
     }
 
-    vertices.push_back(patch.I1);
-    vertices.push_back(patch.J1);
-    vertices.push_back(patch.K1);
+#ifndef NDEBUG
+    int flags;
+    glGetIntegerv(GL_CONTEXT_FLAGS, &flags);
+    if (flags & GL_CONTEXT_FLAG_DEBUG_BIT) {
+      glEnable(GL_DEBUG_OUTPUT);
+      glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
+      glDebugMessageCallback(
+          [](GLenum source, GLenum type, unsigned int id, GLenum severity,
+             GLsizei length, const char *message, const void *userParam) {
+            clog << "Debug message (" << id << "): " << message << endl;
 
-    vertices.push_back(patch.I2);
-    vertices.push_back(patch.J1);
-    vertices.push_back(patch.K2);
+            switch (source) {
+            case GL_DEBUG_SOURCE_API:
+              clog << "Source: API";
+              break;
+            case GL_DEBUG_SOURCE_WINDOW_SYSTEM:
+              clog << "Source: Window System";
+              break;
+            case GL_DEBUG_SOURCE_SHADER_COMPILER:
+              clog << "Source: Shader Compiler";
+              break;
+            case GL_DEBUG_SOURCE_THIRD_PARTY:
+              clog << "Source: Third Party";
+              break;
+            case GL_DEBUG_SOURCE_APPLICATION:
+              clog << "Source: Application";
+              break;
+            case GL_DEBUG_SOURCE_OTHER:
+              clog << "Source: Other";
+              break;
+            }
+            std::cout << std::endl;
 
-    vertices.push_back(patch.I2);
-    vertices.push_back(patch.J2);
-    vertices.push_back(patch.K1);
+            switch (type) {
+            case GL_DEBUG_TYPE_ERROR:
+              clog << "Type: Error";
+              break;
+            case GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR:
+              clog << "Type: Deprecated Behaviour";
+              break;
+            case GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR:
+              clog << "Type: Undefined Behaviour";
+              break;
+            case GL_DEBUG_TYPE_PORTABILITY:
+              clog << "Type: Portability";
+              break;
+            case GL_DEBUG_TYPE_PERFORMANCE:
+              clog << "Type: Performance";
+              break;
+            case GL_DEBUG_TYPE_MARKER:
+              clog << "Type: Marker";
+              break;
+            case GL_DEBUG_TYPE_PUSH_GROUP:
+              clog << "Type: Push Group";
+              break;
+            case GL_DEBUG_TYPE_POP_GROUP:
+              clog << "Type: Pop Group";
+              break;
+            case GL_DEBUG_TYPE_OTHER:
+              clog << "Type: Other";
+              break;
+            }
+            clog << endl;
 
-    vertices.push_back(patch.I1);
-    vertices.push_back(patch.J2);
-    vertices.push_back(patch.K2);
-  }
+            switch (severity) {
+            case GL_DEBUG_SEVERITY_HIGH:
+              clog << "Severity: high";
+              break;
+            case GL_DEBUG_SEVERITY_MEDIUM:
+              clog << "Severity: medium";
+              break;
+            case GL_DEBUG_SEVERITY_LOW:
+              clog << "Severity: low";
+              break;
+            case GL_DEBUG_SEVERITY_NOTIFICATION:
+              clog << "Severity: notification";
+              break;
+            }
+            clog << endl << endl;
+          },
+          nullptr);
+      glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0,
+                            nullptr, GL_TRUE);
+    }
+#endif // !NDEBUG
 
-  size_t i = 0;
-  for (const auto &patch : patches) {
-    vertices.push_back(1);
-    vertices.push_back(1);
-    vertices.push_back(1);
-    vertices.push_back(1);
-  }
-
-  GLuint VBO[2], VAO, EBO;
-  glGenVertexArrays(1, &VAO);
-  glGenBuffers(2, VBO);
-  glGenBuffers(1, &EBO);
-
-  DETECT_ERROR;
-
-  glBindVertexArray(VAO);
-
-  DETECT_ERROR;
-
-  glBindBuffer(GL_ARRAY_BUFFER, VBO[0]);
-  glBufferData(GL_ARRAY_BUFFER,
-               vertices.size() * sizeof(decltype(vertices)::value_type),
-               vertices.data(), GL_STATIC_DRAW);
-
-  glVertexAttribPointer(0, 3, GL_UNSIGNED_INT, GL_FALSE, 3 * sizeof(GLuint), 0);
-  DETECT_ERROR;
-
-  glBindBuffer(GL_ARRAY_BUFFER, VBO[1]);
-  glBufferData(GL_ARRAY_BUFFER,
-               highlight.size() * sizeof(decltype(highlight)::value_type),
-               highlight.data(), GL_DYNAMIC_DRAW);
-
-  glVertexAttribPointer(1, 1, GL_UNSIGNED_INT, GL_FALSE, 1 * sizeof(GLuint), 0);
-  DETECT_ERROR;
-
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-  glBufferData(GL_ELEMENT_ARRAY_BUFFER,
-               indices.size() * sizeof(decltype(indices)::value_type),
-               indices.data(), GL_STATIC_DRAW);
-
-  DETECT_ERROR;
-
-  glEnableVertexAttribArray(0);
-  glEnableVertexAttribArray(1);
-
-  DETECT_ERROR;
-
-  glBindBuffer(GL_ARRAY_BUFFER, 0);
-  glBindVertexArray(0);
-
-  DETECT_ERROR;
-
-  /*
-  glBindVertexBuffer(VAO, VBO[0], 0, sizeof(GLuint) * 3);
-  DETECT_ERROR;
-  glVertexAttribFormat(VAO, 3, GL_UNSIGNED_INT, GL_FALSE, 0);
-  DETECT_ERROR;
-  glVertexAttribBinding(VAO, 0);
-
-  DETECT_ERROR;
-
-  glBindVertexBuffer(VAO, VBO[1], 0, sizeof(GLuint));
-  DETECT_ERROR;
-  glVertexAttribFormat(VAO, 1, GL_UNSIGNED_INT, GL_FALSE, 0);
-  DETECT_ERROR;
-  glVertexAttribBinding(VAO, 1);
-
-  DETECT_ERROR;
-  */
-
-  DETECT_ERROR;
-
-  glUseProgram(shaderProgram);
-
-  DETECT_ERROR;
-
-  constexpr auto u32_max = numeric_limits<u32>::max();
-  u32 I1 = u32_max, I2 = 0, J1 = u32_max, J2 = 0, K1 = u32_max, K2 = 0;
-  for (const auto &patch : patches) {
-    I1 = min(patch.I1, I1);
-    I2 = max(patch.I2, I2);
-    J1 = min(patch.I1, J1);
-    J2 = max(patch.I1, J2);
-    K1 = min(patch.I1, K1);
-    K2 = max(patch.I1, K2);
-  }
-  float far = 100.;
-  if (patches.size() > 0) {
-    u32 I, J, K;
-    I = I2 - I1;
-    J = J2 - J1;
-    K = K2 - K1;
-    far = float(sqrt(I * I + J * J + K * K) * 2);
-  }
-
-  glm::mat4 projection = glm::perspective(
-      glm::radians(60.0f), float(windowWidth) / windowHeight, 0.1f, far);
-
-  glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "projection"), 1,
-                     false, glm::value_ptr(projection));
-
-  DETECT_ERROR;
-
-  // Render loop
-  while (!glfwWindowShouldClose(window)) {
-    // camera/view transformation
-    glm::mat4 view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
-    glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "view"), 1, false,
-                       glm::value_ptr(view));
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     DETECT_ERROR;
 
-    processInput(window);
+    int success;
+    char infoLog[512];
 
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    auto vertexShader = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
+    glCompileShader(vertexShader);
+
+    glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
+    if (!success) {
+      glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
+      cerr << infoLog << endl;
+    }
+
+    auto fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
+    glCompileShader(fragmentShader);
+
+    glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success);
+    if (!success) {
+      glGetShaderInfoLog(fragmentShader, 512, NULL, infoLog);
+      cerr << infoLog << endl;
+    }
+
+    DETECT_ERROR;
+
+    // link shaders
+    auto shaderProgram = glCreateProgram();
+    glAttachShader(shaderProgram, vertexShader);
+    glAttachShader(shaderProgram, fragmentShader);
+    glLinkProgram(shaderProgram);
+
+    // check for linking errors
+    glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
+    if (!success) {
+      glGetProgramInfoLog(shaderProgram, 512, NULL, infoLog);
+      cerr << infoLog << endl;
+    }
+    glDeleteShader(vertexShader);
+    glDeleteShader(fragmentShader);
+
+    DETECT_ERROR;
+
+    vector<GLuint> vertices = {};
+    vector<GLuint> indices = {};
+    for (const auto &patch : patches) {
+      const GLuint N = (GLuint)vertices.size() / 3;
+      if (wireframe) {
+        switch (patch.IOR) {
+        case 1:
+        case -1:
+          indices.push_back(N + 0);
+          indices.push_back(N + 1);
+          indices.push_back(N + 1);
+          indices.push_back(N + 3);
+          indices.push_back(N + 3);
+          indices.push_back(N + 2);
+          indices.push_back(N + 2);
+          indices.push_back(N + 0);
+          break;
+        case 2:
+        case -2:
+          indices.push_back(N + 0);
+          indices.push_back(N + 2);
+          indices.push_back(N + 2);
+          indices.push_back(N + 1);
+          indices.push_back(N + 1);
+          indices.push_back(N + 3);
+          indices.push_back(N + 3);
+          indices.push_back(N + 0);
+          break;
+        case 3:
+        case -3:
+          indices.push_back(N + 0);
+          indices.push_back(N + 1);
+          indices.push_back(N + 1);
+          indices.push_back(N + 2);
+          indices.push_back(N + 2);
+          indices.push_back(N + 3);
+          indices.push_back(N + 3);
+          indices.push_back(N + 0);
+          break;
+        default:
+          break;
+        }
+      } else {
+        indices.push_back(N + 0);
+        indices.push_back(N + 1);
+        indices.push_back(N + 2);
+        switch (patch.IOR) {
+        case 1:
+        case -1:
+          indices.push_back(N + 1);
+          indices.push_back(N + 2);
+          indices.push_back(N + 3);
+          break;
+        case 2:
+        case -2:
+          indices.push_back(N + 0);
+          indices.push_back(N + 1);
+          indices.push_back(N + 3);
+          break;
+        case 3:
+        case -3:
+          indices.push_back(N + 0);
+          indices.push_back(N + 2);
+          indices.push_back(N + 3);
+          break;
+        default:
+          break;
+        }
+      }
+
+      vertices.push_back(patch.I1);
+      vertices.push_back(patch.J1);
+      vertices.push_back(patch.K1);
+
+      vertices.push_back(patch.I2);
+      vertices.push_back(patch.J1);
+      vertices.push_back(patch.K2);
+
+      vertices.push_back(patch.I2);
+      vertices.push_back(patch.J2);
+      vertices.push_back(patch.K1);
+
+      vertices.push_back(patch.I1);
+      vertices.push_back(patch.J2);
+      vertices.push_back(patch.K2);
+    }
+
+    size_t i = 0;
+    for (const auto &patch : patches) {
+      vertices.push_back(0);
+      vertices.push_back(0);
+      vertices.push_back(0);
+      vertices.push_back(0);
+    }
+
+    GLuint VBO[2], VAO, EBO;
+    glGenVertexArrays(1, &VAO);
+    glGenBuffers(2, VBO);
+    glGenBuffers(1, &EBO);
+
+    DETECT_ERROR;
+
+    glBindVertexArray(VAO);
+
+    DETECT_ERROR;
+
+    glBindBuffer(GL_ARRAY_BUFFER, VBO[0]);
+    glBufferData(GL_ARRAY_BUFFER,
+                 vertices.size() * sizeof(decltype(vertices)::value_type),
+                 vertices.data(), GL_STATIC_DRAW);
+
+    glVertexAttribPointer(0, 3, GL_UNSIGNED_INT, GL_FALSE, 3 * sizeof(GLuint),
+                          0);
+    DETECT_ERROR;
+
+    glBindBuffer(GL_ARRAY_BUFFER, VBO[1]);
+    glBufferData(GL_ARRAY_BUFFER,
+                 highlighted.size() * sizeof(decltype(highlighted)::value_type),
+                 highlighted.data(), GL_DYNAMIC_DRAW);
+
+    glVertexAttribPointer(1, 1, GL_UNSIGNED_INT, GL_FALSE, 1 * sizeof(GLuint),
+                          0);
+    DETECT_ERROR;
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER,
+                 indices.size() * sizeof(decltype(indices)::value_type),
+                 indices.data(), GL_STATIC_DRAW);
+
+    DETECT_ERROR;
+
+    glEnableVertexAttribArray(0);
+    glEnableVertexAttribArray(1);
+
+    DETECT_ERROR;
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+
+    DETECT_ERROR;
+
+    DETECT_ERROR;
 
     glUseProgram(shaderProgram);
-    glBindVertexArray(VAO);
-    if (wireframe)
-      glDrawElements(GL_LINES, (GLuint)indices.size(), GL_UNSIGNED_INT, 0);
-    else
-      glDrawElements(GL_TRIANGLES, (GLuint)indices.size(), GL_UNSIGNED_INT, 0);
-
-    glfwSwapBuffers(window);
-    // glfwPollEvents();
-    glfwWaitEvents();
 
     DETECT_ERROR;
+
+    constexpr auto u32_max = numeric_limits<u32>::max();
+    u32 I1 = u32_max, I2 = 0, J1 = u32_max, J2 = 0, K1 = u32_max, K2 = 0;
+    for (const auto &patch : patches) {
+      I1 = min(patch.I1, I1);
+      I2 = max(patch.I2, I2);
+      J1 = min(patch.I1, J1);
+      J2 = max(patch.I1, J2);
+      K1 = min(patch.I1, K1);
+      K2 = max(patch.I1, K2);
+    }
+    float far = 100.;
+    if (patches.size() > 0) {
+      u32 I, J, K;
+      I = I2 - I1;
+      J = J2 - J1;
+      K = K2 - K1;
+      far = float(sqrt(I * I + J * J + K * K) * 2);
+    }
+
+    glm::mat4 projection = glm::perspective(
+        glm::radians(60.0f), float(windowWidth) / windowHeight, 0.1f, far);
+
+    glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "projection"), 1,
+                       false, glm::value_ptr(projection));
+
+    DETECT_ERROR;
+
+    glBindBuffer(GL_ARRAY_BUFFER, VBO[1]);
+
+    // Render loop
+    while (!glfwWindowShouldClose(window)) {
+      // camera/view transformation
+      glm::mat4 view =
+          glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
+      glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "view"), 1, false,
+                         glm::value_ptr(view));
+
+      DETECT_ERROR;
+
+      glBufferData(GL_ARRAY_BUFFER,
+                   highlighted.size() *
+                       sizeof(decltype(highlighted)::value_type),
+                   highlighted.data(), GL_DYNAMIC_DRAW);
+
+      glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+      glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+      glUseProgram(shaderProgram);
+      glBindVertexArray(VAO);
+      if (wireframe)
+        glDrawElements(GL_LINES, (GLuint)indices.size(), GL_UNSIGNED_INT, 0);
+      else
+        glDrawElements(GL_TRIANGLES, (GLuint)indices.size(), GL_UNSIGNED_INT,
+                       0);
+
+      glfwSwapBuffers(window);
+      // glfwPollEvents();
+      glfwWaitEvents();
+
+      DETECT_ERROR;
+    }
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+    DETECT_ERROR;
+
+    glDeleteVertexArrays(1, &VAO);
+    glDeleteBuffers(2, VBO);
+    glDeleteProgram(shaderProgram);
+
+    glfwTerminate();
   }
-
-  DETECT_ERROR;
-
-  glDeleteVertexArrays(1, &VAO);
-  glDeleteBuffers(2, VBO);
-  glDeleteProgram(shaderProgram);
-
-  glfwTerminate();
-  cout << "Visualization trerminated." << endl;
-  return 0;
 }
 #endif // GRAPHICS_ENABLED
 
