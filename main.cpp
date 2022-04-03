@@ -61,9 +61,9 @@ template <size_t sz> static inline void read(istream &in, array<char, sz> &s) {
 }
 
 // Actually I'm not sure about their meanings.
-constexpr const char string_separator[] = "\x1E\x00\x00\x00";
-constexpr const char integer_separator[] = "\x04\x00\x00\x00";
-constexpr const char line_separator[] = "\x24\x00\x00\x00";
+constexpr static inline const char string_separator[] = "\x1E\x00\x00\x00";
+constexpr static inline const char integer_separator[] = "\x04\x00\x00\x00";
+constexpr static inline const char line_separator[] = "\x24\x00\x00\x00";
 
 template <size_t sz>
 static inline void write_line(ostream &out, array<char, sz> &s) {
@@ -613,12 +613,12 @@ static inline float lastFrame = 0.0f;
       clog << *error << endl;                                                  \
   } while (0);
 
-static bool cursor_enabled = false;
-static bool patch_loop = false;
-GLuint current = 0;
-vector<GLuint> highlighted;
+static inline bool cursor_enabled = false;
+static inline bool patch_loop = false;
+static inline size_t current = 0;
+static inline vector<GLuint> highlighted;
 
-void highlight(size_t i) {
+static inline void highlight(size_t i) {
   if (4 * i < highlighted.size()) {
     highlighted[4 * i + 0] |= 0b10;
     highlighted[4 * i + 1] |= 0b10;
@@ -626,7 +626,7 @@ void highlight(size_t i) {
     highlighted[4 * i + 3] |= 0b10;
   }
 }
-void unhighlight(size_t i) {
+static inline void unhighlight(size_t i) {
   if (4 * i < highlighted.size()) {
     highlighted[4 * i + 0] &= ~(GLuint)0b10;
     highlighted[4 * i + 1] &= ~(GLuint)0b10;
@@ -672,12 +672,14 @@ static inline void onKey(GLFWwindow *window, int key, int scancode, int action,
     }
 }
 
-void onFramebufferSizeChange(GLFWwindow *window, int width, int height) {
+static inline void onFramebufferSizeChange(GLFWwindow *window, int width,
+                                           int height) {
   glViewport(0, 0, width, height);
 }
 
-static GLfloat sensitivity = 0.01f;
-void onMouseMove(GLFWwindow *window, double xposIn, double yposIn) {
+static inline GLfloat sensitivity = 0.01f;
+static inline void onMouseMove(GLFWwindow *window, double xposIn,
+                               double yposIn) {
 
   float xpos = static_cast<float>(xposIn);
   float ypos = static_cast<float>(yposIn);
@@ -714,8 +716,9 @@ void onMouseMove(GLFWwindow *window, double xposIn, double yposIn) {
   cameraFront /= glm::length(cameraFront);
 }
 
-static GLfloat rate = 1;
-void onScroll(GLFWwindow *window, double xoffset, double yoffset) {
+static inline GLfloat rate = 1;
+static inline void onScroll(GLFWwindow *window, double xoffset,
+                            double yoffset) {
   if (cursor_enabled) {
     rate *= (GLfloat)exp2(yoffset);
   } else {
@@ -725,7 +728,7 @@ void onScroll(GLFWwindow *window, double xoffset, double yoffset) {
   }
 }
 
-auto vertexShaderSource =
+constexpr static inline auto vertexShaderSource =
     R"(
 #version 330 core
 layout (location = 0) in vec3 aPos;
@@ -747,7 +750,7 @@ void main() {
  }
 }
 )";
-auto fragmentShaderSource = R"(
+constexpr static inline auto fragmentShaderSource = R"(
 #version 330 core
 
 in vec4 color;
