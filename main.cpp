@@ -614,6 +614,7 @@ static inline float lastFrame = 0.0f;
   } while (0);
 
 static bool cursor_enabled = false;
+static bool patch_loop = false;
 GLuint current = 0;
 vector<GLuint> highlighted;
 
@@ -648,13 +649,15 @@ static inline void onKey(GLFWwindow *window, int key, int scancode, int action,
                                       : GLFW_CURSOR_DISABLED);
     }
 
-  static bool continuous = mods & GLFW_MOD_CAPS_LOCK;
+  const bool continuous = mods & GLFW_MOD_CAPS_LOCK;
 
   if (key == GLFW_KEY_LEFT)
     if (action == GLFW_PRESS || (continuous && action == GLFW_REPEAT)) {
       unhighlight(current);
       if (current > 0)
         --current;
+      else if (patch_loop)
+        current = highlighted.size() / 4;
       highlight(current);
     }
 
@@ -663,7 +666,8 @@ static inline void onKey(GLFWwindow *window, int key, int scancode, int action,
       unhighlight(current);
       if (current * 4 < highlighted.size()) {
         ++current;
-      }
+      } else if (patch_loop)
+        current = 0;
       highlight(current);
     }
 }
@@ -768,17 +772,15 @@ static inline int visualize_patch(const vector<patch_info> &patches) {
 
     bool start = false;
     while (!start) {
-      cout << "When in graphics mode, press TAB to enable or disable cursor, "
-              "CAPS to enable continuous key input."
-           << endl
-           << "Settings:" << endl
+      cout << "Settings:" << endl
            << "f - Display as wireframe: " << wireframe << endl
-           << "w - Window width:         " << windowWidth << endl
-           << "h - Window height:        " << windowHeight << endl
+           << "W - Window width:         " << windowWidth << endl
+           << "H - Window height:        " << windowHeight << endl
            << "c - Current patch:        " << current << endl
            << "m - Mouse move sensity:   " << rate << endl
-           << "s - Scroll sensity:       " << rate << endl
+           << "s - Scroll sensity:       " << sensitivity << endl
            << "Options:" << endl
+           << "h - Show graphics help." << endl
            << "g - Start patch visualiztion." << endl
            << "d - Discard." << endl;
       char opt = 'd';
@@ -788,11 +790,11 @@ static inline int visualize_patch(const vector<patch_info> &patches) {
         cout << "Display as wireframe: ";
         cin >> wireframe;
       } break;
-      case 'w': {
+      case 'W': {
         cout << "Window width: ";
         cin >> windowWidth;
       } break;
-      case 'h': {
+      case 'H': {
         cout << "Window height: ";
         cin >> windowHeight;
       } break;
@@ -807,6 +809,17 @@ static inline int visualize_patch(const vector<patch_info> &patches) {
       case 'm': {
         cout << "Mouse move sensity: ";
         cin >> sensitivity;
+      } break;
+      case 'h': {
+        cout << R"(
+Press TAB to enable or disable cursor.
+Press CAPS to enable or disable continuous key input.
+Press LEFT or RIGHT to change current highlighted patch.
+Press ESC to terminate.
+Move mouse to rotate the camera when cursor is disabled.
+Scroll to move forward or backward when cursor is disabled.
+Scroll to modify the scroll sensity when cursor is enabled.
+)";
       } break;
       case 'g': {
         start = true;
