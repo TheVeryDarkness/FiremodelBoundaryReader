@@ -15,6 +15,7 @@
 #include <numeric>
 #include <optional>
 #include <string>
+#include <valarray>
 #include <vector>
 
 #if !defined(GRAPHICS_ENABLED)
@@ -513,6 +514,8 @@ q - quit
       cout << "Directory: ";
       string s;
       getline(cin, s);
+      if (s.empty())
+        getline(cin, s);
       filesystem::path p = s;
       if (filesystem::is_directory(p))
         filesystem::current_path(p);
@@ -1171,24 +1174,14 @@ Scroll to modify the scroll sensity when cursor is enabled.
 }
 #endif // GRAPHICS_ENABLED
 
-static inline void print_patch(const vector<patch_info> &patches,
-                               const vector<frame> &frames, u32 p, u32 m,
-                               u32 n) {
-  u32 f = 0;
-  cin >> f;
-  if (f >= frames.size()) {
-    cout << "Not a valid frame." << endl;
-    return;
-  }
-
+static inline void print_patch(const vector<float> &data, u32 m, u32 n) {
   u32 precision = 0;
   cout << "Precision:";
   cin >> precision;
   cout << setprecision(precision);
 
-  const auto &patch = frames[f].data[p];
   u32 i = 0;
-  for (auto v : patch.data) {
+  for (auto v : data) {
     cout << v;
     ++i;
     if (i % m == 0) {
@@ -1263,7 +1256,7 @@ snapshot  - Take patch data in a frame as current result.
 average   - Calculate average on specified dimension of current result.
 discard   - Discard.
 )";
-    string opt;
+    string opt = "discard";
     cin >> opt;
     if (opt == "print")
       if (sizes.size() > 2) {
@@ -1272,10 +1265,10 @@ discard   - Discard.
         cout << "Data not found." << endl;
       } else if (sizes.size() == 2) {
         auto m = sizes[0], n = sizes[1];
-        print_patch(patches, frames, p, m, n);
+        print_patch(data, m, n);
       } else {
         auto m = sizes[0], n = (u32)1;
-        print_patch(patches, frames, p, m, n);
+        print_patch(data, m, n);
       }
     else if (opt == "flat") {
       reduce_dimension(sizes, 2);
@@ -1323,23 +1316,21 @@ discard   - Discard.
 static inline void select_patch(const vector<patch_info> &patches,
                                 const vector<frame> &frames) {
   u32 p = 0;
-  while (true) {
-    cout << "Select a patch to analyze. Input an invalid index to discard."
-         << endl;
+  cout << "Select a patch to analyze. Input an invalid index to discard."
+       << endl;
 #if GRAPHICS_ENABLED
-    if (current < patches.size())
-      cout << "Current patch selected in graphics mode is: " << p << "."
-           << endl;
+  if (current < patches.size())
+    cout << "Current patch selected in graphics mode is: " << current << "."
+         << endl;
 #endif // GRAPHICS_ENABLED
 
-    cout << "Patch index: ";
-    cin >> p;
-    if (p >= patches.size()) {
-      return;
-    }
-
-    analyze_patch(patches, frames, p);
+  cout << "Patch index: ";
+  cin >> p;
+  if (p >= patches.size()) {
+    return;
   }
+
+  analyze_patch(patches, frames, p);
 }
 
 /// @retval Whether to quit.
