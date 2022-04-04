@@ -227,7 +227,11 @@ struct frame {
 static inline tuple<array<char, 30 + 1>, array<char, 30 + 1>,
                     array<char, 30 + 1>, vector<patch_info>, vector<frame>>
 read_file(istream &fin) {
-  array<char, 30 + 1> label, bar_label, units;
+  tuple<array<char, 30 + 1>, array<char, 30 + 1>, array<char, 30 + 1>,
+        vector<patch_info>, vector<frame>>
+      res;
+  auto &[label, bar_label, units, patches, frames] = res;
+
   u32 n_patch;
 
   check(fin, string_separator);
@@ -244,7 +248,6 @@ read_file(istream &fin) {
   n_patch = read_uint32(fin);
   check(fin, integer_separator);
 
-  vector<patch_info> patches;
   for (u32 i = 0; i < n_patch; ++i) {
     check(fin, line_separator);
     u32 I1 = read_uint32(fin);
@@ -261,7 +264,6 @@ read_file(istream &fin) {
     check(fin, line_separator);
   }
 
-  vector<frame> vals;
   while (fin.peek() != decay_t<decltype(fin)>::traits_type::eof() &&
          !fin.eof()) {
     vector<patch_data> current(patches.size(), patch_data{});
@@ -284,9 +286,9 @@ read_file(istream &fin) {
       CHECK_FORMAT(patch_end == patch_size);
     }
 
-    vals.push_back(frame{stime, std::move(current)});
+    frames.push_back(frame{stime, std::move(current)});
   }
-  return {label, bar_label, units, patches, vals};
+  return res;
 }
 
 static inline void search_frame_by_time(const vector<frame> &frames) {
@@ -454,7 +456,7 @@ q - quit
     auto cp = filesystem::current_path();
     auto di = filesystem::directory_iterator(cp);
 
-    cout << cp << "> ";
+    cout << endl << cp.string() << "> ";
     char opt = 'q';
     cin >> opt;
     switch (opt) {
