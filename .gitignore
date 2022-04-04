@@ -399,3 +399,11 @@ FodyWeavers.xsd
 
 # Test data
 test/*
+
+# CMake
+cmakePresets.json 
+cmakeUserPresets.json 
+build/*
+
+#VSCode
+.vscode/**
