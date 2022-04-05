@@ -8,12 +8,14 @@
 /// FDS_User_Guide.pdf. As for opengl, most of the codes about opengl are
 /// adapted from https://github.com/JoeyDeVries/LearnOpenGL.
 #include <array>
+#include <cassert>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <numeric>
 #include <optional>
+#include <sstream>
 #include <string>
 #include <valarray>
 #include <vector>
@@ -1180,11 +1182,12 @@ static inline void print_patch(const vector<float> &data, u32 m, u32 n) {
   cin >> precision;
   cout << setprecision(precision);
 
+  cout << endl;
   u32 i = 0;
   for (auto v : data) {
     cout << v;
     ++i;
-    if (i % m == 0) {
+    if (i % n == 0) {
       cout << endl;
     } else
       cout << ' ';
@@ -1212,78 +1215,90 @@ static inline u32 array_offset(const vector<u32> &sizes,
   return offset;
 }
 
+/// @return Stride on the dimension
 static inline u32 array_stride(const vector<u32> &sizes, size_t d) {
   u32 res = 1;
-  auto p = sizes.begin() + d + 1, end = sizes.end();
+  auto p = sizes.begin() + d, end = sizes.end();
   for (; p != end; ++p)
     res *= *p;
   return res;
 }
 
-/// @brief Increment the index.
-static inline bool increment_index(const vector<u32> &sizes,
-                                   vector<u32> &index) {
-  auto rbegin = index.rbegin(), rend = index.rend();
-  auto srbegin = sizes.rbegin(), srend = sizes.rend();
-  if (rbegin == rend)
-    return true;
-  ++*rbegin;
-
-  while (*rbegin == *srbegin) {
-    *rbegin = 0;
-    ++rbegin;
-    if (rbegin == rend)
-      return true;
-    ++*rbegin;
-    ++srbegin;
-  }
-  return false;
-}
-
 static inline void analyze_patch(const vector<patch_info> &patches,
-                                 const vector<frame> &frames, u32 p) {
-  const auto &patch = patches[p];
+                                 const vector<frame> &frames, u32 i_patch) {
+  const auto &patch = patches[i_patch];
   vector<float> data;
   vector<u32> sizes;
   while (true) {
     cout << R"(
 Commands:
-print     - Print current result to console.
-flat      - Flat current result.
-linearize - Linearize current result.
-drop      - Drop current result.
-snapshot  - Take patch data in a frame as current result.
-average   - Calculate average on specified dimension of current result.
-discard   - Discard.
+m - Show current dimensions.
+p - Print current result to console.
+w - Input in console to overlap current result.
+f - Flatten current result to specified dimension.
+s - Take patch data in a frame as current result.
+a - Calculate average on specified dimension of current result.
+d - Discard.
 )";
-    string opt = "discard";
+    char opt = 'd';
     cin >> opt;
-    if (opt == "print")
+    switch (opt) {
+    case 'd':
+      return;
+    case 'w': {
+      cout << "Input 0 to stop." << endl << "Expected size: ";
+      u32 sz = 0;
+      sizes.clear();
+      do {
+        sz = 0;
+        cin >> sz;
+        if (sz == 0)
+          break;
+        sizes.push_back(sz);
+      } while (true);
+
+      u32 data_size = array_stride(sizes, 0);
+
+      float e = 0.f;
+      data.clear();
+      data.reserve(data_size);
+      while (data.size() < data_size) {
+        cin >> e;
+        data.push_back(e);
+      }
+    } break;
+    case 'm': {
+      if (sizes.empty())
+        break;
+      auto begin = sizes.cbegin(), end = sizes.cend();
+      cout << *begin;
+      ++begin;
+      for (; begin != end; ++begin)
+        cout << '*' << *begin;
+    } break;
+    case 'p':
       if (sizes.size() > 2) {
         cout << "Data dimension " << sizes.size() << " > 2." << endl;
       } else if (sizes.size() == 0) {
-        cout << "Data not found." << endl;
+        if (data.size() == 1)
+          cout << endl << data[0] << endl;
+        else
+          cout << "Data not found." << endl;
       } else if (sizes.size() == 2) {
         auto m = sizes[0], n = sizes[1];
         print_patch(data, m, n);
       } else {
-        auto m = sizes[0], n = (u32)1;
+        auto m = (u32)1, n = sizes[0];
         print_patch(data, m, n);
       }
-    else if (opt == "flat") {
-      reduce_dimension(sizes, 2);
-      if (sizes.size() > 2)
-        cout << "Flattening failed. Current dimension is " << sizes.size()
-             << "." << endl;
-    } else if (opt == "linearize") {
+      break;
+    case 'l':
       reduce_dimension(sizes, 1);
       if (sizes.size() > 1)
         cout << "Linearization failed. Current dimension is " << sizes.size()
              << "." << endl;
-    } else if (opt == "drop") {
-      data.clear();
-      sizes.clear();
-    } else if (opt == "snapshot") {
+      break;
+    case 's': {
       cout << "Frame index: ";
       auto f = frames.size();
       cin >> f;
@@ -1291,24 +1306,79 @@ discard   - Discard.
         cout << "Frame index invalid." << endl;
         break;
       }
-      data = frames[f].data[p].data;
+      data = frames[f].data[i_patch].data;
       sizes = {patch.I(), patch.J(), patch.K()};
-    } else if (opt == "average") {
-      break;
-      size_t dimension = 0;
+    } break;
+    case 'f': {
+      size_t d = 2;
+      cin >> d;
+      reduce_dimension(sizes, d);
+      if (sizes.size() > d)
+        cout << "Flattening failed. Current dimension is " << sizes.size()
+             << "." << endl;
+    } break;
+    case 'a': {
+      // Consider [l][m][n]
+      size_t dimension = -1;
       cin >> dimension;
-      if (dimension >= sizes.size()) {
+      if (dimension >= sizes.size() || sizes.size() == 1) {
         cout << "Dimension invalid." << endl;
         break;
       }
-      vector<u32> index(sizes.size(), 0);
 
-      auto base = array_offset(sizes, index);
-      auto stride = array_stride(sizes, dimension);
-      for (size_t i = 0; i < sizes[dimension]; ++i)
-        ;
-    } else if (opt == "discard") {
-      return;
+      const auto m = sizes[dimension], n = array_stride(sizes, dimension + 1);
+
+      vector<float> new_result;
+      new_result.resize(data.size() / m);
+
+      const auto &_data = data;
+      const u32 l = (u32)data.size() / m / n;
+      assert(data.size() == l * m * n);
+
+#ifdef DEBUG_AVERAGE
+      for (size_t i = 0; i < l; ++i) {
+        for (size_t k = 0; k < n; ++k) {
+          for (size_t j = 0; j < m; ++j) {
+            new_result[i * n + k] += data[i * m * n + j * n + k];
+          }
+        }
+      }
+#else
+      for (size_t i = 0; i < l; ++i) {
+        // [i][]
+        float *const begin = new_result.data() + i * n;
+        // [i][][]
+        const float *_begin = data.data() + i * m * n;
+
+        for (float *p = begin; p != begin + n; ++p, ++_begin) {
+          const u32 k = p - new_result.data() - i * n;
+          assert(0 <= k && k < n);
+          assert(_begin = data.data() + i * m * n + k);
+          for (const float *_p = _begin; _p != _begin + m * n; _p += n) {
+            const u32 j = (_p - _begin) / n;
+            const u32 dj = (_p - _begin) % n;
+            assert(0 <= j && j < m);
+            assert(dj == 0);
+            assert(p == new_result.data() + i * n + k);
+            assert(_p == data.data() + i * m * n + j * n + k);
+            // [i][k] [i][j][k]
+            assert(new_result.data() <= p);
+            assert(p < new_result.data() + new_result.size());
+            assert(data.data() <= _p);
+            assert(_p < data.data() + data.size());
+            *p += *_p;
+          }
+        }
+      }
+#endif // DEBUG_AVERAGE
+
+      data = std::move(new_result);
+      sizes.erase(sizes.cbegin() + dimension);
+      for (auto &e : data)
+        e /= m;
+    } break;
+    default:
+      break;
     }
   }
 }
