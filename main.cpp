@@ -1335,7 +1335,8 @@ d - Discard.
       const u32 l = (u32)data.size() / m / n;
       assert(data.size() == l * m * n);
 
-#ifdef DEBUG_AVERAGE
+#ifdef SIMPLE_AVERAGE
+      // Will this be optimzed well?
       for (size_t i = 0; i < l; ++i) {
         for (size_t k = 0; k < n; ++k) {
           for (size_t j = 0; j < m; ++j) {
@@ -1344,33 +1345,45 @@ d - Discard.
         }
       }
 #else
-      for (size_t i = 0; i < l; ++i) {
-        // [i][]
-        float *const begin = new_result.data() + i * n;
-        // [i][][]
-        const float *_begin = data.data() + i * m * n;
-
-        for (float *p = begin; p != begin + n; ++p, ++_begin) {
-          const u32 k = p - new_result.data() - i * n;
+      for (float *p0 = new_result.data(), // [i][]
+               *const end0 = new_result.data() + new_result.size(),
+                 *_p0 = data.data(); // [i][][]
+           p0 != end0; p0 += n, _p0 += m * n) {
+#ifndef NDEBUG
+        const u32 i = (p0 - new_result.data()) / n;
+        const u32 di = (p0 - new_result.data()) % n;
+        assert(di == 0);
+        assert(_p0 == data.data() + i * m * n);
+#endif // !NDEBUG
+        for (float *p1 = p0, // [i][k]
+                 *const end1 = p0 + n,
+                   *_p1 = _p0; // [i][][k]
+             p1 != end1; ++p1, ++_p1) {
+#ifndef NDEBUG
+          const u32 k = p1 - new_result.data() - i * n;
           assert(0 <= k && k < n);
-          assert(_begin = data.data() + i * m * n + k);
-          for (const float *_p = _begin; _p != _begin + m * n; _p += n) {
-            const u32 j = (_p - _begin) / n;
-            const u32 dj = (_p - _begin) % n;
+          assert(_p1 == data.data() + i * m * n + k);
+#endif // !NDEBUG
+          for (const float *_p2 = _p1, *const _end2 = _p1 + m * n; _p2 != _end2;
+               _p2 += n) {
+#ifndef NDEBUG
+            const u32 j = (_p2 - _p1) / n;
+            const u32 dj = (_p2 - _p1) % n;
             assert(0 <= j && j < m);
             assert(dj == 0);
-            assert(p == new_result.data() + i * n + k);
-            assert(_p == data.data() + i * m * n + j * n + k);
-            // [i][k] [i][j][k]
-            assert(new_result.data() <= p);
-            assert(p < new_result.data() + new_result.size());
-            assert(data.data() <= _p);
-            assert(_p < data.data() + data.size());
-            *p += *_p;
+            assert(p1 == new_result.data() + i * n + k);
+            assert(_p2 == data.data() + i * m * n + j * n + k);
+
+            assert(new_result.data() <= p1);
+            assert(p1 < new_result.data() + new_result.size());
+            assert(data.data() <= _p2);
+            assert(_p2 < data.data() + data.size());
+#endif // !NDEBUG
+            *p1 += *_p2; // [i][k] [i][j][k]
           }
         }
       }
-#endif // DEBUG_AVERAGE
+#endif // SIMPLE_AVERAGE
 
       data = std::move(new_result);
       sizes.erase(sizes.cbegin() + dimension);
