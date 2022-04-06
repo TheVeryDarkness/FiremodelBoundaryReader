@@ -181,7 +181,7 @@ ostream &operator<<(ostream &o, const patch_info &patch) {
 }
 
 template <typename Ty> void write_binary(ostream &o, Ty &&data) {
-  o.write(reinterpret_cast<const char *>(data), sizeof(data));
+  o.write(reinterpret_cast<const char *>(&data), sizeof(data));
 }
 template <typename Ty>
 void write_vector_binary(ostream &o, const vector<Ty> &data) {
