@@ -50,14 +50,9 @@ static inline void print_patch(const vector<float> &data, u32 m, u32 n) {
 static inline void save_patch_as_binary(const vector<float> &data,
                                         const vector<u32> &sizes,
                                         ofstream &fout) {
-  for (auto sz : sizes)
-    fout << sz;
-  fout << u32(0);
-  for (const auto &e : sizes)
-    fout << e;
-  fout << u32(0);
-  for (auto e : data)
-    fout << e;
+  write_vector_binary(fout, sizes);
+  write_binary(fout, u32(0));
+  write_vector_binary(fout, data);
 }
 
 static inline tuple<u32, u32> get_matrix_size(const vector<u32> &sizes) {
@@ -123,7 +118,7 @@ static inline vector<float> average(const vector<float> &data,
   assert(data.size() == l * m * n);
 
 #ifdef SIMPLE_AVERAGE
-  // Will this be optimzed well?
+  // Will this be optimized well?
   for (size_t i = 0; i < l; ++i) {
     for (size_t k = 0; k < n; ++k) {
       for (size_t j = 0; j < m; ++j) {

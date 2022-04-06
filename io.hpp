@@ -166,7 +166,7 @@ read_file(istream &fin) {
   }
   return res;
 }
-std::ostream &operator<<(std::ostream &o, const patch_info &patch) {
+ostream &operator<<(ostream &o, const patch_info &patch) {
   write_number(o, patch.I1);
   write_number(o, patch.I2);
   write_number(o, patch.J1);
@@ -178,4 +178,13 @@ std::ostream &operator<<(std::ostream &o, const patch_info &patch) {
   write_number(o, patch.NM);
   write_number(o, patch.size());
   return o;
+}
+
+template <typename Ty> void write_binary(ostream &o, Ty &&data) {
+  o.write(reinterpret_cast<const char *>(data), sizeof(data));
+}
+template <typename Ty>
+void write_vector_binary(ostream &o, const vector<Ty> &data) {
+  o.write(reinterpret_cast<const char *>(data.data()),
+          sizeof(Ty) * data.size());
 }
