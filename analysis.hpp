@@ -1,32 +1,84 @@
 #pragma once
 #include "types.hpp"
 #include <cassert>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <vector>
 
 using std::cin;
 using std::cout;
+using std::decay_t;
 using std::endl;
+using std::ofstream;
+using std::ostream;
 using std::setprecision;
+using std::tuple;
 
-static inline void print_patch(const vector<float> &data, u32 m, u32 n) {
-  u32 precision = 0;
+static inline u16 default_precision = 0;
+static inline u16 input_precision() {
+  if (default_precision)
+    return default_precision;
+  u16 precision = 0;
   cout << "Precision:";
   cin >> precision;
-  cout << setprecision(precision);
+  return precision;
+}
+static inline void set_default_precision(u16 precision) {
+  default_precision = precision;
+}
 
-  cout << endl;
+static inline void as_csv(ostream &o, const vector<float> &data, u32 m, u32 n,
+                          const char *sep = ",") {
   u32 i = 0;
   for (auto v : data) {
-    cout << v;
+    o << v;
     ++i;
     if (i % n == 0) {
-      cout << endl;
+      o << endl;
     } else
-      cout << ' ';
+      o << sep;
   }
+  o << endl;
+}
+
+static inline void print_patch(const vector<float> &data, u32 m, u32 n) {
   cout << endl;
+  as_csv(cout, data, m, n, " ");
+}
+
+static inline void save_patch_as_binary(const vector<float> &data,
+                                        const vector<u32> &sizes,
+                                        ofstream &fout) {
+  for (auto sz : sizes)
+    fout << sz;
+  fout << u32(0);
+  for (const auto &e : sizes)
+    fout << e;
+  fout << u32(0);
+  for (auto e : data)
+    fout << e;
+}
+
+static inline tuple<u32, u32> get_matrix_size(const vector<u32> &sizes) {
+
+  if (sizes.size() > 2) {
+    cout << "Data dimension " << sizes.size() << " > 2." << endl;
+    return {0, 0};
+  } else if (sizes.size() == 0) {
+    return {0, 1};
+  } else if (sizes.size() == 2) {
+    auto m = sizes[0], n = sizes[1];
+    return {m, n};
+  } else {
+    auto m = (u32)1, n = sizes[0];
+    return {m, n};
+  }
+}
+
+static inline void save_patch_as_csv_text(const vector<float> &data, u32 m,
+                                          u32 n, ofstream &fout) {
+  as_csv(fout, data, m, n);
 }
 
 static inline void reduce_dimension(vector<u32> &sizes, size_t target) {
@@ -38,7 +90,7 @@ static inline void reduce_dimension(vector<u32> &sizes, size_t target) {
   }
 }
 
-/// @brief Access data in the flattened multi-dimension array.
+/// @brief Get data offset in the flattened multi-dimension array.
 static inline u32 array_offset(const vector<u32> &sizes,
                                const vector<u32> &index) {
   u32 offset = 0;
@@ -85,7 +137,7 @@ static inline vector<float> average(const vector<float> &data,
                    *_p0 = data.data(); // [i][][]
        p0 != end0; p0 += n, _p0 += m * n) {
 #ifndef NDEBUG
-    assert(p0 > new_result.data());
+    assert(p0 >= new_result.data());
     const u32 i = (u32)(p0 - new_result.data()) / n;
     const u32 di = (u32)(p0 - new_result.data()) % n;
     assert(di == 0);

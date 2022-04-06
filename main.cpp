@@ -296,10 +296,14 @@ static inline void analyze_patch(const vector<patch_info> &patches,
 Commands:
 m - Show current dimensions.
 p - Print current result to console.
+P - Set default flaot-point number precision.
 w - Input in console to overlap current result.
 f - Flatten current result to specified dimension.
 s - Take patch data in a frame as current result.
+B - Save current result as binary to file.
+C - Save current result as CSV file.
 a - Calculate average on specified dimension of current result.
+A - Copy data in all frames of this patch as current result.
 d - Discard.
 )";
     char opt = 'd';
@@ -308,7 +312,7 @@ d - Discard.
     case 'd':
       return;
     case 'w': {
-      cout << "Input 0 to stop." << endl << "Expected size: ";
+      cout << "Size(0 to stop): ";
       u32 sz = 0;
       sizes.clear();
       do {
@@ -338,22 +342,18 @@ d - Discard.
       for (; begin != end; ++begin)
         cout << '*' << *begin;
     } break;
-    case 'p':
-      if (sizes.size() > 2) {
-        cout << "Data dimension " << sizes.size() << " > 2." << endl;
-      } else if (sizes.size() == 0) {
-        if (data.size() == 1)
-          cout << endl << data[0] << endl;
-        else
-          cout << "Data not found." << endl;
-      } else if (sizes.size() == 2) {
-        auto m = sizes[0], n = sizes[1];
+    case 'p': {
+      u16 precision = input_precision();
+      cout << setprecision(precision);
+
+      auto [m, n] = get_matrix_size(sizes);
+      if (n != 0)
         print_patch(data, m, n);
-      } else {
-        auto m = (u32)1, n = sizes[0];
-        print_patch(data, m, n);
-      }
-      break;
+    } break;
+    case 'P': {
+      u16 precision = input_precision();
+      set_default_precision(precision);
+    } break;
     case 'l':
       reduce_dimension(sizes, 1);
       if (sizes.size() > 1)
@@ -370,6 +370,33 @@ d - Discard.
       }
       data = frames[f].data[i_patch].data;
       sizes = {patch.I(), patch.J(), patch.K()};
+    } break;
+    case 'B': {
+      cout << "File name: ";
+      string path;
+      getline(cin, path);
+      ofstream fout(path, ios::binary);
+      if (!fout) {
+        cout << "Failed to open file." << endl;
+        break;
+      }
+      save_patch_as_binary(data, sizes, fout);
+    } break;
+    case 'C': {
+      cout << "File name: ";
+      string path;
+      getline(cin, path);
+      ofstream fout(path);
+      if (!fout) {
+        cout << "Failed to open file." << endl;
+        break;
+      }
+
+      u16 precision = input_precision();
+      fout << setprecision(precision);
+
+      auto [m, n] = get_matrix_size(sizes);
+      save_patch_as_csv_text(data, m, n, fout);
     } break;
     case 'f': {
       size_t d = 2;
@@ -390,6 +417,15 @@ d - Discard.
       data = average(data, sizes, dimension);
       sizes.erase(sizes.cbegin() + dimension);
 
+    } break;
+    case 'A': {
+      sizes = {(u32)frames.size(), patch.I(), patch.J(), patch.K()};
+      data.clear();
+      data.reserve(array_stride(sizes, 0));
+      for (const auto &frame : frames) {
+        const auto &patch = frame.data[i_patch];
+        data.insert(data.cend(), patch.data.cbegin(), patch.data.cend());
+      }
     } break;
     default:
       break;
