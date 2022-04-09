@@ -26,7 +26,7 @@ constexpr static inline const char integer_separator[] = "\x04\x00\x00\x00";
 constexpr static inline const char line_separator[] = "\x24\x00\x00\x00";
 
 template <size_t sz>
-static inline void write_line(ostream &out, array<char, sz> &s) {
+static inline void write_line(ostream &out, const array<char, sz> &s) {
   out.write(s.data(), sz) << endl;
 }
 
@@ -97,18 +97,11 @@ static inline std::int32_t read_int32(istream &in) {
 
 std::float_t read_float(istream &in) { return read_integer<std::float_t>(in); }
 
-/*
- * @retval Label, Bar Label, Units, Patches, Frames
- */
 static inline tuple<array<char, 30 + 1>, array<char, 30 + 1>,
-                    array<char, 30 + 1>, vector<patch_info>, vector<frame>>
-read_file(istream &fin) {
-  tuple<array<char, 30 + 1>, array<char, 30 + 1>, array<char, 30 + 1>,
-        vector<patch_info>, vector<frame>>
-      res;
-  auto &[label, bar_label, units, patches, frames] = res;
-
-  u32 n_patch;
+                    array<char, 30 + 1>>
+read_file_header(istream &fin) {
+  tuple<array<char, 30 + 1>, array<char, 30 + 1>, array<char, 30 + 1>> res;
+  auto &[label, bar_label, units] = res;
 
   check(fin, string_separator);
   read(fin, label);
@@ -120,10 +113,18 @@ read_file(istream &fin) {
   read(fin, units);
   check(fin, string_separator);
 
+  return res;
+}
+
+static inline vector<patch_info> read_patches(istream &fin) {
+  u32 n_patch;
+
   check(fin, integer_separator);
   n_patch = read_uint32(fin);
   check(fin, integer_separator);
 
+  vector<patch_info> patches;
+  patches.reserve(n_patch);
   for (u32 i = 0; i < n_patch; ++i) {
     check(fin, line_separator);
     u32 I1 = read_uint32(fin);
@@ -139,7 +140,12 @@ read_file(istream &fin) {
     const auto &patch = patches.back();
     check(fin, line_separator);
   }
+  return patches;
+}
 
+static inline vector<frame> read_frames(istream &fin,
+                                        const vector<patch_info> patches) {
+  vector<frame> frames;
   while (fin.peek() != decay_t<decltype(fin)>::traits_type::eof() &&
          !fin.eof()) {
     vector<patch_data> current(patches.size(), patch_data{});
@@ -164,8 +170,33 @@ read_file(istream &fin) {
 
     frames.push_back(frame{stime, std::move(current)});
   }
-  return res;
+  return frames;
 }
+
+/*
+ * @retval Label, Bar Label, Units, Patches
+ */
+static inline tuple<array<char, 30 + 1>, array<char, 30 + 1>,
+                    array<char, 30 + 1>, vector<patch_info>>
+read_file_header_and_patches(istream &fin) {
+  auto &&header = read_file_header(fin);
+  auto &&patches = read_patches(fin);
+  return std::tuple_cat(std::move(header), std::make_tuple(std::move(patches)));
+}
+
+/*
+ * @retval Label, Bar Label, Units, Patches, Frames
+ */
+static inline tuple<array<char, 30 + 1>, array<char, 30 + 1>,
+                    array<char, 30 + 1>, vector<patch_info>, vector<frame>>
+read_file(istream &fin) {
+  auto &&header = read_file_header(fin);
+  auto &&patches = read_patches(fin);
+  auto &&frames = read_frames(fin, patches);
+  return std::tuple_cat(std::move(header),
+                        std::make_tuple(std::move(patches), std::move(frames)));
+}
+
 ostream &operator<<(ostream &o, const patch_info &patch) {
   write_number(o, patch.I1);
   write_number(o, patch.I2);
@@ -178,6 +209,40 @@ ostream &operator<<(ostream &o, const patch_info &patch) {
   write_number(o, patch.NM);
   write_number(o, patch.size());
   return o;
+}
+
+void print_header(ostream &o, const array<char, 30 + 1> &label,
+                  const array<char, 30 + 1> &bar_label,
+                  const array<char, 30 + 1> &units) {
+  write_line(o << "Label:     ", label);
+  write_line(o << "Bar Label: ", bar_label);
+  write_line(o << "Units:     ", units);
+}
+
+void print_patches(ostream &o, const vector<patch_info> patches) {
+  constexpr auto int_len = numeric_limits<i32>::digits10 + 1;
+  constexpr auto uint_len = numeric_limits<u32>::digits10 + 1;
+  o << setw(uint_len) << "I1"
+    << " " << setw(uint_len) << "I2"
+    << " " << setw(uint_len) << "J1"
+    << " " << setw(uint_len) << "J2"
+    << " " << setw(uint_len) << "K1"
+    << " " << setw(uint_len) << "K2"
+    << " " << setw(3) << "IOR"
+    << " " << setw(uint_len) << "OBST_INDEX"
+    << " " << setw(uint_len) << "MESH_INDEX"
+    << " " << setw(uint_len) << "SIZE"
+    << " " << endl;
+  for (const auto &patch : patches)
+    o << patch << endl;
+}
+
+void print_frames(ostream &o, const vector<frame> frames) {
+  size_t i = 0;
+  for (const auto &f : frames) {
+    o << "Frame " << i << " at " << f.time << "s." << endl;
+    ++i;
+  }
 }
 
 template <typename Ty> void write_binary(ostream &o, Ty &&data) {

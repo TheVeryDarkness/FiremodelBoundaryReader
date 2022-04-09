@@ -25,6 +25,7 @@
 #include <vector>
 
 using std::cin;
+using std::conditional_t;
 using std::cout;
 using std::endl;
 using std::getline;
@@ -37,6 +38,7 @@ using std::string;
 using std::filesystem::current_path;
 using std::filesystem::directory_entry;
 using std::filesystem::directory_iterator;
+using std::filesystem::is_regular_file;
 using std::filesystem::path;
 
 static inline void search_frame_by_time(const vector<frame> &frames) {
@@ -161,42 +163,16 @@ d - discard.
   }
 }
 
-static inline void search_frame_or_patch(const vector<frame> &frames,
-                                         const vector<patch_info> &patches) {
-  while (true) {
-    cout << R"(
-Select item to search for.
-f - Frame.
-p - Patch.
-d - Discard.
-)" << endl;
-    char op2 = 'd';
-    cin >> op2;
-    switch (op2) {
-    case 'f': {
-      search_frame(frames);
-    } break;
-    case 'p': {
-      search_patch(patches);
-    } break;
-    case 'd':
-      return;
-    default:
-      cout << "Option not found." << endl;
-      break;
-    }
-  }
-}
-
 /*
  * @retval File stream that reads the corresponding file.
  */
 static inline optional<ifstream> select_file() {
   constexpr auto help = R"(
 Choose what to do next.
-h - Show this list.
+h - Show this help list.
 d - Show all sub-directories in current directory and change current working directory.
-r - Select a file to read.
+s - Select a file to read.
+r - Read file with specified name.
 c - Change current working directory.
 p - Change current directory to parent directory if there is one.
 q - quit
@@ -228,7 +204,7 @@ q - quit
       if (i < entries.size())
         current_path(entries[i]);
     } break;
-    case 'r': {
+    case 's': {
       vector<path> files;
       for (const auto &entry : di) {
         const auto &path = entry.path();
@@ -271,6 +247,26 @@ q - quit
       else
         cout << "Not a directory." << endl;
     } break;
+    case 'r': {
+      cout << "File: ";
+      string s;
+      getline(cin, s);
+      if (s.empty())
+        getline(cin, s);
+      path p = s;
+      if (is_regular_file(p))
+        current_path(p);
+      else {
+        cout << "Not a file." << endl;
+        continue;
+      }
+
+      auto fin = ifstream(p, ios::binary);
+      if (fin.is_open())
+        return fin;
+      cout << "Failed to open." << endl;
+      continue;
+    } break;
     case 'p': {
       current_path(current_path().parent_path());
     } break;
@@ -300,6 +296,7 @@ P - Set default flaot-point number precision.
 w - Input in console to overlap current result.
 f - Flatten current result to specified dimension.
 s - Take patch data in a frame as current result.
+S - Sample.
 B - Save current result as binary to file.
 C - Save current result as CSV file.
 a - Calculate average on specified dimension of current result.
@@ -370,6 +367,17 @@ d - Discard.
       }
       data = frames[f].data[i_patch].data;
       sizes = {patch.I(), patch.J(), patch.K()};
+    } break;
+    case 'S': {
+      size_t dimension = -1;
+      cin >> dimension;
+      if (dimension >= sizes.size() || sizes.size() == 1) {
+        cout << "Dimension invalid." << endl;
+        break;
+      }
+      auto sz = sizes[dimension];
+      cout << "Size of this dimension: " << sz << endl;
+
     } break;
     case 'B': {
       cout << "File name: ";
@@ -460,29 +468,43 @@ static inline void select_patch(const vector<patch_info> &patches,
 /// @param patches Information of patches stored in the .bf file.
 /// @param frames Information and boundary quantity data of frames stored in the
 /// .bf file.
-static inline bool process_file(array<char, 30 + 1> &label,
-                                array<char, 30 + 1> &bar_label,
-                                array<char, 30 + 1> &units,
-                                const vector<patch_info> &patches,
-                                const vector<frame> &frames) {
-  constexpr auto help =
-      R"(
+template <bool patches_read, bool frames_read>
+static inline bool process_file(
+    const array<char, 30 + 1> &label, const array<char, 30 + 1> &bar_label,
+    const array<char, 30 + 1> &units,
+    const conditional_t<patches_read, vector<patch_info>, tuple<>> &patches,
+    const conditional_t<frames_read, vector<frame>, tuple<>> &frames) {
+  auto help = []() {
+    cout <<
+        R"(
 Commands: 
 q - Quit.
 h - Show this help.
-b - Show boundary quantity information.
-f - Show frames.
-p - Show patches.
-a - Analyze patch data.)"
-#if GRAPHICS_ENABLED
-      R"(
-g - Visualize patches.)"
-#endif // GRAPHICS_ENABLED
-      R"(
-s - Search for frame or patch.
 u - Unload file.
-)";
-  cout << help << endl;
+b - Show boundary quantity basic information.)";
+
+    if constexpr (frames_read)
+      cout << R"(
+f - Show frames.
+F - Search for frame.)";
+
+    if constexpr (patches_read)
+      cout << R"(
+p - Show patches.
+P - Search for Patch.)"
+#if GRAPHICS_ENABLED
+              R"(
+g - Visualize patches geometry.)"
+#endif // GRAPHICS_ENABLED
+          ;
+
+    if constexpr (patches_read && frames_read)
+      cout << R"(
+a - Analyze patch data.)";
+
+    cout << endl;
+  };
+  help();
   while (true) {
     cout << "Please input your command here: ";
     char op1 = 'q';
@@ -490,53 +512,56 @@ u - Unload file.
     switch (op1) {
     case 'q':
       return true;
-      break;
     case 'u':
       return false;
-    case 'b':
-      write_line(cout << "Label:     ", label);
-      write_line(cout << "Bar Label: ", bar_label);
-      write_line(cout << "Units:     ", units);
-      break;
+    case 'b': {
+      print_header(cout, label, bar_label, units);
+    } break;
     case 'a': {
-      select_patch(patches, frames);
+      if constexpr (patches_read && frames_read)
+        select_patch(patches, frames);
+      else
+        goto CMDNF;
     } break;
     case 'f': {
-      size_t i = 0;
-      for (const auto &f : frames) {
-        cout << "Frame " << i << " at " << f.time << "s." << endl;
-        ++i;
-      }
+      if constexpr (frames_read)
+        print_frames(cout, frames);
+      else
+        goto CMDNF;
     } break;
 #if GRAPHICS_ENABLED
-    case 'g':
-      visualize_patch(patches);
-      break;
+    case 'g': {
+      if constexpr (patches_read)
+        visualize_patch(patches);
+      else
+        goto CMDNF;
+    } break;
 #endif // GRAPHICS_ENABLED
     case 'p': {
-      constexpr auto int_len = numeric_limits<i32>::digits10 + 1;
-      constexpr auto uint_len = numeric_limits<u32>::digits10 + 1;
-      cout << setw(uint_len) << "I1"
-           << " " << setw(uint_len) << "I2"
-           << " " << setw(uint_len) << "J1"
-           << " " << setw(uint_len) << "J2"
-           << " " << setw(uint_len) << "K1"
-           << " " << setw(uint_len) << "K2"
-           << " " << setw(3) << "IOR"
-           << " " << setw(uint_len) << "OBST_INDEX"
-           << " " << setw(uint_len) << "MESH_INDEX"
-           << " " << setw(uint_len) << "SIZE"
-           << " " << endl;
-      for (const auto &patch : patches)
-        cout << patch << endl;
+      if constexpr (patches_read)
+        print_patches(cout, patches);
+      else
+        goto CMDNF;
     } break;
-    case 's': {
-      search_frame_or_patch(frames, patches);
+    case 'F': {
+      if constexpr (frames_read)
+        search_frame(frames);
+      else
+        goto CMDNF;
     } break;
-    default:
-      cout << "Command not found." << endl;
+    case 'P': {
+      if constexpr (patches_read)
+        search_patch(patches);
+      else
+        goto CMDNF;
+    } break;
     case 'h':
-      cout << help << endl;
+      help();
+      break;
+    default:
+    CMDNF:
+      cout << "Command not found." << endl;
+      help();
       break;
     }
   }
@@ -556,15 +581,49 @@ int main(int argc, char *argv[]) {
         cout << "Failed to open the file." << endl;
       }
 
-      cout << "Reading started." << endl;
+      cout << R"(
+h - Header only.
+p - Header and patches.
+f - Header, patches and all frames.
+d - Discard.
+)";
+      char c = 'd';
+      cin >> c;
+      switch (c) {
+      case 'h': {
+        cout << "Reading started." << endl;
+        auto [label, bar_label, units] = read_file_header(fin);
+        cout << "Reading finished." << endl;
 
-      auto [label, bar_label, units, patches, frames] = read_file(fin);
+        bool quitting =
+            process_file<false, false>(label, bar_label, units, {}, {});
+        if (quitting)
+          return 0;
+      } break;
+      case 'p': {
+        cout << "Reading started." << endl;
+        auto [label, bar_label, units, patches] =
+            read_file_header_and_patches(fin);
+        cout << "Reading finished." << endl;
 
-      cout << "Reading finished." << endl;
+        bool quitting =
+            process_file<true, false>(label, bar_label, units, patches, {});
+        if (quitting)
+          return 0;
+      } break;
+      case 'f': {
+        cout << "Reading started." << endl;
+        auto [label, bar_label, units, patches, frames] = read_file(fin);
+        cout << "Reading finished." << endl;
 
-      bool quitting = process_file(label, bar_label, units, patches, frames);
-      if (quitting)
-        return 0;
+        bool quitting =
+            process_file<true, true>(label, bar_label, units, patches, frames);
+        if (quitting)
+          return 0;
+      } break;
+      default:
+        break;
+      }
 
     } catch (const exception &e) {
       cerr << "Exception caught: " << e.what() << endl;

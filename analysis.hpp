@@ -174,3 +174,34 @@ static inline vector<float> average(const vector<float> &data,
     e /= m;
   return new_result;
 }
+
+static inline vector<float> sample(const vector<float> &data,
+                                   vector<u32> &sizes, size_t dimension,
+                                   const vector<u32> &pos) {
+
+  const auto m = sizes[dimension], n = array_stride(sizes, dimension + 1),
+             _m = (u32)pos.size();
+
+  vector<float> new_result;
+  new_result.resize(data.size() / m * _m);
+
+  const auto &_data = data;
+  const u32 l = (u32)data.size() / m / n;
+  assert(data.size() == l * m * n);
+
+  for (auto p : pos)
+    assert(p < m);
+
+  // Will this be optimized well?
+  for (size_t i = 0; i < l; ++i) {
+    for (size_t k = 0; k < n; ++k) {
+      for (size_t _j = 0; _j < _m; ++_j) {
+        new_result[i * _m * n + _j * n + k] = data[i * m * n + pos[_j] * n + k];
+      }
+    }
+  }
+
+  for (auto &e : new_result)
+    e /= m;
+  return new_result;
+}
