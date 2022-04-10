@@ -375,8 +375,19 @@ d - Discard.
         cout << "Dimension invalid." << endl;
         break;
       }
-      auto sz = sizes[dimension];
+      const auto sz = sizes[dimension];
       cout << "Size of this dimension: " << sz << endl;
+      vector<u32> pos;
+      while (true) {
+        u32 i = -1;
+        cin >> i;
+        if (i >= sz)
+          break;
+        pos.push_back(i);
+      }
+
+      data = sample(data, sizes, dimension, pos);
+      sizes[dimension] = (u32)pos.size();
 
     } break;
     case 'B': {

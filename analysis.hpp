@@ -117,7 +117,7 @@ static inline vector<float> average(const vector<float> &data,
   const auto &_data = data;
   const u32 l = (u32)data.size() / m / n;
   assert(data.size() == l * m * n);
-
+#define SIMPLE_AVERAGE
 #ifdef SIMPLE_AVERAGE
   // Will this be optimized well?
   for (size_t i = 0; i < l; ++i) {
@@ -176,7 +176,7 @@ static inline vector<float> average(const vector<float> &data,
 }
 
 static inline vector<float> sample(const vector<float> &data,
-                                   vector<u32> &sizes, size_t dimension,
+                                   const vector<u32> &sizes, size_t dimension,
                                    const vector<u32> &pos) {
 
   const auto m = sizes[dimension], n = array_stride(sizes, dimension + 1),
@@ -201,7 +201,5 @@ static inline vector<float> sample(const vector<float> &data,
     }
   }
 
-  for (auto &e : new_result)
-    e /= m;
   return new_result;
 }

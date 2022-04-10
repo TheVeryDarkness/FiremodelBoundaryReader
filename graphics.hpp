@@ -240,8 +240,10 @@ static inline int visualize_patch(const vector<patch_info> &patches) {
         cin >> windowHeight;
       } break;
       case 'c': {
+        unhighlight(current);
         cout << "Current patch: ";
         cin >> current;
+        highlight(current);
       } break;
       case 's': {
         cout << "Scroll sensity: ";
