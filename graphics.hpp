@@ -198,6 +198,130 @@ void main() {
 }
 )";
 
+static inline void onGLDebugMessage(GLenum source, GLenum type, unsigned int id,
+                                    GLenum severity, GLsizei length,
+                                    const char *message,
+                                    const void *userParam) {
+  clog << "Debug message (" << id << "): " << message << endl;
+
+  switch (source) {
+  case GL_DEBUG_SOURCE_API:
+    clog << "Source: API";
+    break;
+  case GL_DEBUG_SOURCE_WINDOW_SYSTEM:
+    clog << "Source: Window System";
+    break;
+  case GL_DEBUG_SOURCE_SHADER_COMPILER:
+    clog << "Source: Shader Compiler";
+    break;
+  case GL_DEBUG_SOURCE_THIRD_PARTY:
+    clog << "Source: Third Party";
+    break;
+  case GL_DEBUG_SOURCE_APPLICATION:
+    clog << "Source: Application";
+    break;
+  case GL_DEBUG_SOURCE_OTHER:
+    clog << "Source: Other";
+    break;
+  }
+  std::cout << std::endl;
+
+  switch (type) {
+  case GL_DEBUG_TYPE_ERROR:
+    clog << "Type: Error";
+    break;
+  case GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR:
+    clog << "Type: Deprecated Behaviour";
+    break;
+  case GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR:
+    clog << "Type: Undefined Behaviour";
+    break;
+  case GL_DEBUG_TYPE_PORTABILITY:
+    clog << "Type: Portability";
+    break;
+  case GL_DEBUG_TYPE_PERFORMANCE:
+    clog << "Type: Performance";
+    break;
+  case GL_DEBUG_TYPE_MARKER:
+    clog << "Type: Marker";
+    break;
+  case GL_DEBUG_TYPE_PUSH_GROUP:
+    clog << "Type: Push Group";
+    break;
+  case GL_DEBUG_TYPE_POP_GROUP:
+    clog << "Type: Pop Group";
+    break;
+  case GL_DEBUG_TYPE_OTHER:
+    clog << "Type: Other";
+    break;
+  }
+  clog << endl;
+
+  switch (severity) {
+  case GL_DEBUG_SEVERITY_HIGH:
+    clog << "Severity: high";
+    break;
+  case GL_DEBUG_SEVERITY_MEDIUM:
+    clog << "Severity: medium";
+    break;
+  case GL_DEBUG_SEVERITY_LOW:
+    clog << "Severity: low";
+    break;
+  case GL_DEBUG_SEVERITY_NOTIFICATION:
+    clog << "Severity: notification";
+    break;
+  }
+  clog << endl << endl;
+}
+
+static inline GLuint create_shader_program() {
+  int success;
+  char infoLog[512];
+
+  DETECT_ERROR;
+
+  auto vertexShader = glCreateShader(GL_VERTEX_SHADER);
+  glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
+  glCompileShader(vertexShader);
+
+  glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
+  if (!success) {
+    glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
+    cerr << infoLog << endl;
+  }
+
+  auto fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+  glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
+  glCompileShader(fragmentShader);
+
+  glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success);
+  if (!success) {
+    glGetShaderInfoLog(fragmentShader, 512, NULL, infoLog);
+    cerr << infoLog << endl;
+  }
+
+  DETECT_ERROR;
+
+  // link shaders
+  auto shaderProgram = glCreateProgram();
+  glAttachShader(shaderProgram, vertexShader);
+  glAttachShader(shaderProgram, fragmentShader);
+  glLinkProgram(shaderProgram);
+
+  // check for linking errors
+  glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
+  if (!success) {
+    glGetProgramInfoLog(shaderProgram, 512, NULL, infoLog);
+    cerr << infoLog << endl;
+  }
+  glDeleteShader(vertexShader);
+  glDeleteShader(fragmentShader);
+
+  DETECT_ERROR;
+
+  return shaderProgram;
+}
+
 static inline int visualize_patch(const vector<patch_info> &patches) {
   static bool wireframe = false;
   static GLuint windowWidth = 800;
@@ -314,81 +438,7 @@ Scroll to modify the scroll sensity when cursor is enabled.
     if (flags & GL_CONTEXT_FLAG_DEBUG_BIT) {
       glEnable(GL_DEBUG_OUTPUT);
       glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
-      glDebugMessageCallback(
-          [](GLenum source, GLenum type, unsigned int id, GLenum severity,
-             GLsizei length, const char *message, const void *userParam) {
-            clog << "Debug message (" << id << "): " << message << endl;
-
-            switch (source) {
-            case GL_DEBUG_SOURCE_API:
-              clog << "Source: API";
-              break;
-            case GL_DEBUG_SOURCE_WINDOW_SYSTEM:
-              clog << "Source: Window System";
-              break;
-            case GL_DEBUG_SOURCE_SHADER_COMPILER:
-              clog << "Source: Shader Compiler";
-              break;
-            case GL_DEBUG_SOURCE_THIRD_PARTY:
-              clog << "Source: Third Party";
-              break;
-            case GL_DEBUG_SOURCE_APPLICATION:
-              clog << "Source: Application";
-              break;
-            case GL_DEBUG_SOURCE_OTHER:
-              clog << "Source: Other";
-              break;
-            }
-            std::cout << std::endl;
-
-            switch (type) {
-            case GL_DEBUG_TYPE_ERROR:
-              clog << "Type: Error";
-              break;
-            case GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR:
-              clog << "Type: Deprecated Behaviour";
-              break;
-            case GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR:
-              clog << "Type: Undefined Behaviour";
-              break;
-            case GL_DEBUG_TYPE_PORTABILITY:
-              clog << "Type: Portability";
-              break;
-            case GL_DEBUG_TYPE_PERFORMANCE:
-              clog << "Type: Performance";
-              break;
-            case GL_DEBUG_TYPE_MARKER:
-              clog << "Type: Marker";
-              break;
-            case GL_DEBUG_TYPE_PUSH_GROUP:
-              clog << "Type: Push Group";
-              break;
-            case GL_DEBUG_TYPE_POP_GROUP:
-              clog << "Type: Pop Group";
-              break;
-            case GL_DEBUG_TYPE_OTHER:
-              clog << "Type: Other";
-              break;
-            }
-            clog << endl;
-
-            switch (severity) {
-            case GL_DEBUG_SEVERITY_HIGH:
-              clog << "Severity: high";
-              break;
-            case GL_DEBUG_SEVERITY_MEDIUM:
-              clog << "Severity: medium";
-              break;
-            case GL_DEBUG_SEVERITY_LOW:
-              clog << "Severity: low";
-              break;
-            case GL_DEBUG_SEVERITY_NOTIFICATION:
-              clog << "Severity: notification";
-              break;
-            }
-            clog << endl << endl;
-          },
-          nullptr);
+      glDebugMessageCallback(onGLDebugMessage, nullptr);
       glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0,
                             nullptr, GL_TRUE);
     }
@@ -400,45 +450,7 @@ Scroll to modify the scroll sensity when cursor is enabled.
 
     DETECT_ERROR;
 
-    int success;
-    char infoLog[512];
-
-    auto vertexShader = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
-    glCompileShader(vertexShader);
-
-    glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
-    if (!success) {
-      glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
-      cerr << infoLog << endl;
-    }
-
-    auto fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
-    glCompileShader(fragmentShader);
-
-    glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success);
-    if (!success) {
-      glGetShaderInfoLog(fragmentShader, 512, NULL, infoLog);
-      cerr << infoLog << endl;
-    }
-
-    DETECT_ERROR;
-
-    // link shaders
-    auto shaderProgram = glCreateProgram();
-    glAttachShader(shaderProgram, vertexShader);
-    glAttachShader(shaderProgram, fragmentShader);
-    glLinkProgram(shaderProgram);
-
-    // check for linking errors
-    glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
-    if (!success) {
-      glGetProgramInfoLog(shaderProgram, 512, NULL, infoLog);
-      cerr << infoLog << endl;
-    }
-    glDeleteShader(vertexShader);
-    glDeleteShader(fragmentShader);
+    GLuint shaderProgram = create_shader_program();
 
     DETECT_ERROR;
 
@@ -652,6 +664,7 @@ Scroll to modify the scroll sensity when cursor is enabled.
     }
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
     DETECT_ERROR;
 
@@ -662,4 +675,5 @@ Scroll to modify the scroll sensity when cursor is enabled.
     glfwTerminate();
   }
 }
+
 #endif // GRAPHICS_ENABLED
