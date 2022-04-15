@@ -137,7 +137,6 @@ static inline vector<patch_info> read_patches(istream &fin) {
     u32 OBST_INDEX = read_uint32(fin);
     u32 NM = read_uint32(fin);
     patches.push_back({I1, I2, J1, J2, K1, K2, IOR, OBST_INDEX, NM});
-    const auto &patch = patches.back();
     check(fin, line_separator);
   }
   return patches;
