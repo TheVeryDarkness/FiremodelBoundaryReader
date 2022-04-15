@@ -150,6 +150,7 @@
     <ClInclude Include="analysis.hpp" />
     <ClInclude Include="graphics.hpp" />
     <ClInclude Include="io.hpp" />
+    <ClInclude Include="proxy.hpp" />
     <ClInclude Include="types.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

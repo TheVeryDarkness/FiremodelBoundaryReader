@@ -1,5 +1,6 @@
 #pragma once
 #include "io.hpp"
+#include "proxy.hpp"
 #include "types.hpp"
 #include <cassert>
 #include <fstream>
@@ -7,7 +8,6 @@
 #include <iostream>
 #include <vector>
 
-using std::cin;
 using std::cout;
 using std::decay_t;
 using std::endl;

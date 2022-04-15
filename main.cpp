@@ -24,7 +24,7 @@
 #include <valarray>
 #include <vector>
 
-using std::cin;
+using std::char_traits;
 using std::conditional_t;
 using std::cout;
 using std::endl;
@@ -579,6 +579,27 @@ a - Analyze patch data.)";
 }
 
 int main(int argc, char *argv[]) {
+  if (argc >= 2) {
+    if (strcmp(argv[1], "--") == 0) {
+      clog << "Forwarding command line arguments." << endl;
+      for (int i = 2; i < argc; ++i) {
+        cin << argv[i];
+        cin.endl();
+      }
+    } else if (strcmp(argv[1], "-s") == 0) {
+      ifstream fin(argv[2]);
+      if (!fin) {
+        cerr << "Failed to open the script." << endl;
+        return -1;
+      }
+      clog << "Loading script." << endl;
+      string file;
+      getline(fin, file, (char)char_traits<char>::eof());
+    } else {
+      clog << "Command line arguments ignored." << endl;
+    }
+  }
+
   while (true) {
     try {
       cerr << hex;

@@ -6,7 +6,6 @@
 #include <limits>
 #include <vector>
 using std::cerr;
-using std::cin;
 using std::clog;
 using std::cout;
 using std::endl;
@@ -98,7 +97,7 @@ static inline void onKey(GLFWwindow *window, int key, int scancode, int action,
       if (current > 0)
         --current;
       else if (patch_loop)
-        current = patches_count;
+        current = patches_count ? patches_count - 1 : 0;
     }
 
   if (key == GLFW_KEY_RIGHT)
@@ -108,6 +107,9 @@ static inline void onKey(GLFWwindow *window, int key, int scancode, int action,
       } else if (patch_loop)
         current = 0;
     }
+
+  string title = std::to_string(current);
+  glfwSetWindowTitle(window, title.c_str());
 }
 
 static inline GLfloat sensitivity = 0.01f;
@@ -312,7 +314,7 @@ create_shader_program(initializer_list<const char *> vertexShaderSource,
 static bool fullScreen = false;
 static bool wireframe = false;
 
-/// @retval Whether to start visualization.
+/// @retval Start visualization or discard.
 static inline bool visualization_settings() {
   while (true) {
     cout << "Settings:" << endl
@@ -386,12 +388,15 @@ static inline void bind_attribute(const vector<U> &vec, const GLuint VBO) {
   glBindBuffer(GL_ARRAY_BUFFER, VBO);
   glBufferData(GL_ARRAY_BUFFER, vec.size() * sizeof(U), vec.data(),
                GL_STATIC_DRAW);
+
   static_assert(is_same_v<remove_all_extents_t<T>, U>, "Not matched.");
   constexpr auto extent = extent_v<T, 0>;
   constexpr auto length = extent == 0 ? 1 : extent;
 
   glVertexAttribPointer(i, length, gl_type_enum_v<U>, GL_FALSE,
                         length * sizeof(U), 0);
+
+  glBindBuffer(GL_ARRAY_BUFFER, 0);
 
   DETECT_ERROR;
 }
@@ -589,7 +594,7 @@ uniform mat4 pv;
 out vec4 color;
 )";
   const char *index = R"(
-layout(location = 1) in uint index;
+layout(location = 1) in float index;
 )";
   const char *highlight = R"(
 uniform uint highlighted;
@@ -600,7 +605,7 @@ void main() {
 )";
   // DEBUG:
   const char *main_highlight = R"(
- if (highlighted <= index) {
+ if (highlighted == index) {
   color = vec4(.8f, .1f, .0f, .8f);
  } else {
   color = vec4(.8f, .8f, .8f, .2f);
