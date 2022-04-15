@@ -75,24 +75,7 @@ static inline float lastFrame = 0.0f;
 static inline bool cursor_enabled = false;
 static inline bool patch_loop = false;
 static inline size_t current = 0;
-static inline vector<GLuint> highlighted;
-
-static inline void highlight(size_t i) {
-  if (4 * i < highlighted.size()) {
-    highlighted[4 * i + 0] |= 0b10;
-    highlighted[4 * i + 1] |= 0b10;
-    highlighted[4 * i + 2] |= 0b10;
-    highlighted[4 * i + 3] |= 0b10;
-  }
-}
-static inline void unhighlight(size_t i) {
-  if (4 * i < highlighted.size()) {
-    highlighted[4 * i + 0] &= ~(GLuint)0b10;
-    highlighted[4 * i + 1] &= ~(GLuint)0b10;
-    highlighted[4 * i + 2] &= ~(GLuint)0b10;
-    highlighted[4 * i + 3] &= ~(GLuint)0b10;
-  }
-}
+static inline size_t patches_count = 0;
 
 static inline void onKey(GLFWwindow *window, int key, int scancode, int action,
                          int mods) {
@@ -112,22 +95,18 @@ static inline void onKey(GLFWwindow *window, int key, int scancode, int action,
 
   if (key == GLFW_KEY_LEFT)
     if (action == GLFW_PRESS || (continuous && action == GLFW_REPEAT)) {
-      unhighlight(current);
       if (current > 0)
         --current;
       else if (patch_loop)
-        current = highlighted.size() / 4;
-      highlight(current);
+        current = patches_count;
     }
 
   if (key == GLFW_KEY_RIGHT)
     if (action == GLFW_PRESS || (continuous && action == GLFW_REPEAT)) {
-      unhighlight(current);
-      if (current * 4 < highlighted.size()) {
+      if (current < patches_count) {
         ++current;
       } else if (patch_loop)
         current = 0;
-      highlight(current);
     }
 }
 
@@ -148,7 +127,7 @@ static inline void onMouseMove(GLFWwindow *window, double xposIn,
   }
 
   float xoffset = xpos - lastX;
-  /// reversed since y-coordinates go from bottom to top
+  /// Reversed since y-coordinates go from bottom to top
   float yoffset = lastY - ypos;
   lastX = xpos;
   lastY = ypos;
@@ -368,10 +347,8 @@ static inline bool visualization_settings() {
       cin >> windowHeight;
     } break;
     case 'c': {
-      unhighlight(current);
       cout << "Current patch: ";
       cin >> current;
-      highlight(current);
     } break;
     case 's': {
       cout << "Scroll sensity: ";
@@ -410,10 +387,11 @@ static inline void bind_attribute(const vector<U> &vec, const GLuint VBO) {
   glBufferData(GL_ARRAY_BUFFER, vec.size() * sizeof(U), vec.data(),
                GL_STATIC_DRAW);
   static_assert(is_same_v<remove_all_extents_t<T>, U>, "Not matched.");
-  constexpr static auto extent = extent_v<T, 0>;
-  constexpr static auto length = extent == 0 ? 1 : extent;
+  constexpr auto extent = extent_v<T, 0>;
+  constexpr auto length = extent == 0 ? 1 : extent;
+
   glVertexAttribPointer(i, length, gl_type_enum_v<U>, GL_FALSE,
-                        length * sizeof(GLuint), 0);
+                        length * sizeof(U), 0);
 
   DETECT_ERROR;
 }
@@ -486,7 +464,7 @@ static inline int visualize(GetData &&getData, GetFar &&getFar,
   glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
   if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
-    cout << "Failed to initialize GLAD" << endl;
+    cout << "Failed to initialize GLAD." << endl;
     return -1;
   }
 
@@ -537,8 +515,8 @@ static inline int visualize(GetData &&getData, GetFar &&getFar,
 
   DETECT_ERROR;
 
-  glEnableVertexAttribArray(0);
-  glEnableVertexAttribArray(1);
+  for (size_t i = 0; i < vertexAttributesCount; ++i)
+    glEnableVertexAttribArray(i);
 
   DETECT_ERROR;
 
@@ -558,8 +536,6 @@ static inline int visualize(GetData &&getData, GetFar &&getFar,
 
   DETECT_ERROR;
 
-  glBindBuffer(GL_ARRAY_BUFFER, VBO[1]);
-
   // Render loop
   while (!glfwWindowShouldClose(window)) {
     // camera/view transformation
@@ -570,6 +546,8 @@ static inline int visualize(GetData &&getData, GetFar &&getFar,
     glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "pv"), 1, false,
                        glm::value_ptr(pv));
 
+    DETECT_ERROR;
+
     glUniform1ui(glGetUniformLocation(shaderProgram, "highlighted"), current);
 
     DETECT_ERROR;
@@ -579,10 +557,9 @@ static inline int visualize(GetData &&getData, GetFar &&getFar,
 
     glUseProgram(shaderProgram);
     glBindVertexArray(VAO);
-    if (wireframe)
-      glDrawElements(GL_LINES, (GLuint)indices.size(), GL_UNSIGNED_INT, 0);
-    else
-      glDrawElements(GL_TRIANGLES, (GLuint)indices.size(), GL_UNSIGNED_INT, 0);
+    glDrawElements(wireframe ? GL_LINES : GL_TRIANGLES, (GLuint)indices.size(),
+                   gl_type_enum_v<Index>, 0);
+    glBindVertexArray(0);
 
     glfwSwapBuffers(window);
     // glfwPollEvents();
@@ -597,7 +574,7 @@ static inline int visualize(GetData &&getData, GetFar &&getFar,
   DETECT_ERROR;
 
   glDeleteVertexArrays(1, &VAO);
-  glDeleteBuffers(2, VBO);
+  glDeleteBuffers(vertexAttributesCount, VBO);
   glDeleteProgram(shaderProgram);
 
   glfwTerminate();
@@ -621,12 +598,14 @@ uniform uint highlighted;
 void main() {
  gl_Position = pv * vec4(aPos.x, aPos.y, aPos.z, 1.0);
 )";
+  // DEBUG:
   const char *main_highlight = R"(
- if (highlighted == index) {
+ if (highlighted <= index) {
   color = vec4(.8f, .1f, .0f, .8f);
  } else {
   color = vec4(.8f, .8f, .8f, .2f);
- })";
+ }
+)";
   const char *main_end = R"(
 }
 )";
@@ -644,11 +623,10 @@ void main() {
 
 static inline int visualize_patch(const vector<patch_info> &patches) {
 
-  highlighted.resize(patches.size() * 4, 0);
+  patches_count = patches.size();
   if (current > patches.size()) {
     current = 0;
   }
-  highlight(current);
 
   while (true) {
     if (!visualization_settings())
@@ -659,6 +637,12 @@ static inline int visualize_patch(const vector<patch_info> &patches) {
           tuple<tuple<vector<GLuint>, vector<GLuint>>, vector<GLuint>> res;
           auto &[vertices, indices] = res;
           auto &[position, patchIndices] = vertices;
+
+          position.reserve(patches.size() * 12);
+          patchIndices.reserve(patches.size() * 4);
+          indices.reserve(wireframe ? indices.size() * 8 : indices.size() * 6);
+
+          size_t i_patch = 0;
           for (const auto &patch : patches) {
             const GLuint N = (GLuint)position.size() / 3;
             if (wireframe) {
@@ -744,7 +728,9 @@ static inline int visualize_patch(const vector<patch_info> &patches) {
             position.push_back(patch.K2);
 
             for (size_t i = 0; i < 4; ++i)
-              patchIndices.push_back(N);
+              patchIndices.push_back(i_patch);
+
+            ++i_patch;
           }
 
           return res;
