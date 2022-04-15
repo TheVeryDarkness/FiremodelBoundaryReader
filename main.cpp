@@ -366,7 +366,7 @@ d - Discard.
         break;
       }
       data = frames[f].data[i_patch].data;
-      sizes = {patch.I(), patch.J(), patch.K()};
+      sizes = {patch.K(), patch.J(), patch.I()};
     } break;
     case 'S': {
       size_t dimension = -1;
@@ -438,7 +438,7 @@ d - Discard.
 
     } break;
     case 'A': {
-      sizes = {(u32)frames.size(), patch.I(), patch.J(), patch.K()};
+      sizes = {(u32)frames.size(), patch.K(), patch.J(), patch.I()};
       data.clear();
       data.reserve(array_stride(sizes, 0));
       for (const auto &frame : frames) {
