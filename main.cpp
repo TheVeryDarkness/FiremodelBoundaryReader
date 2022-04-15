@@ -300,7 +300,12 @@ S - Sample.
 B - Save current result as binary to file.
 C - Save current result as CSV file.
 a - Calculate average on specified dimension of current result.
-A - Copy data in all frames of this patch as current result.
+A - Copy data in all frames of this patch as current result.)"
+#if GRAPHICS_ENABLED
+            R"("
+v - Visualize current result.)"
+#endif // GRAPHICS_ENABLED
+            R"(
 d - Discard.
 )";
     char opt = 'd';
@@ -390,6 +395,14 @@ d - Discard.
       sizes[dimension] = (u32)pos.size();
 
     } break;
+#if GRAPHICS_ENABLED
+    case 'v': {
+      if (!data.empty()) {
+        auto [m, n] = get_matrix_size(sizes);
+        visualize_data(data, m, n);
+      }
+    } break;
+#endif // GRAPHICS_ENABLED
     case 'B': {
       cout << "File name: ";
       string path;

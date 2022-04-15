@@ -18,6 +18,7 @@ using std::is_invocable_r_v;
 using std::is_same_v;
 using std::make_index_sequence;
 using std::max;
+using std::max_element;
 using std::min;
 using std::numeric_limits;
 using std::remove_all_extents_t;
@@ -41,8 +42,11 @@ using std::underlying_type_t;
 template <typename> struct gl_type_enum;
 template <>
 struct gl_type_enum<GLuint> : integral_constant<GLenum, GL_UNSIGNED_INT> {};
+template <> struct gl_type_enum<GLint> : integral_constant<GLenum, GL_INT> {};
 template <>
 struct gl_type_enum<GLfloat> : integral_constant<GLenum, GL_FLOAT> {};
+template <>
+struct gl_type_enum<GLdouble> : integral_constant<GLenum, GL_DOUBLE> {};
 
 template <typename T>
 constexpr static inline GLenum gl_type_enum_v = gl_type_enum<T>::value;
@@ -163,8 +167,8 @@ static inline void onScroll(GLFWwindow *window, double xoffset,
   }
 }
 
-static GLuint windowWidth = 800;
-static GLuint windowHeight = 600;
+static GLuint windowWidth = 1600;
+static GLuint windowHeight = 1200;
 static inline void onFramebufferSizeChange(GLFWwindow *window, int width,
                                            int height) {
   windowWidth = width;
@@ -257,7 +261,7 @@ create_shader_program(initializer_list<const char *> vertexShaderSource,
   DETECT_ERROR;
 
   auto vertexShader = glCreateShader(GL_VERTEX_SHADER);
-  glShaderSource(vertexShader, vertexShaderSource.size(),
+  glShaderSource(vertexShader, (GLsizei)vertexShaderSource.size(),
                  vertexShaderSource.begin(), NULL);
   glCompileShader(vertexShader);
 
@@ -279,7 +283,7 @@ create_shader_program(initializer_list<const char *> vertexShaderSource,
   }
 
   auto fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-  glShaderSource(fragmentShader, fragmentShaderSource.size(),
+  glShaderSource(fragmentShader, (GLsizei)fragmentShaderSource.size(),
                  fragmentShaderSource.begin(), NULL);
   glCompileShader(fragmentShader);
 
@@ -537,7 +541,7 @@ static inline int visualize(GetData &&getData, GetFar &&getFar,
   float far = getFar();
 
   glm::mat4 projection = glm::perspective(
-      glm::radians(60.0f), float(windowWidth) / windowHeight, 0.01f, far);
+      glm::radians(60.0f), float(windowWidth) / windowHeight, 0.1f, far);
 
   DETECT_ERROR;
 
@@ -603,13 +607,15 @@ uniform uint highlighted;
 void main() {
  gl_Position = pv * vec4(aPos.x, aPos.y, aPos.z, 1.0);
 )";
-  // DEBUG:
   const char *main_highlight = R"(
  if (highlighted == index) {
   color = vec4(.8f, .1f, .0f, .8f);
  } else {
   color = vec4(.8f, .8f, .8f, .2f);
  }
+)";
+  const char *main_color = R"(
+  color = vec4(.8f, .8f, .8f, .6f);
 )";
   const char *main_end = R"(
 }
@@ -647,7 +653,7 @@ static inline int visualize_patch(const vector<patch_info> &patches) {
           patchIndices.reserve(patches.size() * 4);
           indices.reserve(wireframe ? indices.size() * 8 : indices.size() * 6);
 
-          size_t i_patch = 0;
+          GLuint i_patch = 0;
           for (const auto &patch : patches) {
             const GLuint N = (GLuint)position.size() / 3;
             if (wireframe) {
@@ -757,7 +763,7 @@ static inline int visualize_patch(const vector<patch_info> &patches) {
             I = I2 - I1;
             J = J2 - J1;
             K = K2 - K1;
-            far = float(sqrt(I * I + J * J + K * K) * 2);
+            far = float(sqrt(I * I + J * J + K * K) * 5);
           }
 
           return far;
@@ -766,6 +772,59 @@ static inline int visualize_patch(const vector<patch_info> &patches) {
          vertexShaderSource.highlight, vertexShaderSource.main_begin,
          vertexShaderSource.main_highlight, vertexShaderSource.main_end},
         {fragmentShaderSource}, type_list<GLuint[3], GLuint>{});
+  }
+}
+
+static inline int visualize_data(const vector<float> &data, u32 m, u32 n) {
+  assert(data.size() == m * n);
+  while (true) {
+    if (!visualization_settings())
+      return 0;
+
+    visualize<GLuint>(
+        [&data, n]() {
+          tuple<tuple<vector<float>>, vector<GLuint>> res;
+          auto &[vertices, indices] = res;
+          auto &[position] = vertices;
+
+          position.reserve(data.size() * 3);
+          indices.reserve(wireframe ? indices.size() * 4 : indices.size() * 6);
+
+          size_t index = 0;
+          for (const auto &p : data) {
+            auto i = index / n, j = index % n;
+            if (j != 0)
+              if (wireframe) {
+                indices.push_back(i * n + j - 1);
+                indices.push_back(i * n + j);
+              }
+            if (i != 0)
+              if (wireframe) {
+                indices.push_back(i * n + j);
+                indices.push_back((i - 1) * n);
+              } else {
+                indices.push_back(i * n + j);
+                indices.push_back(i * n + j + 1);
+                indices.push_back((i - 1) * n + j);
+
+                indices.push_back(i * n + j + 1);
+                indices.push_back((i - 1) * n + j + 1);
+                indices.push_back((i - 1) * n + j);
+              }
+
+            position.push_back(i);
+            position.push_back(j);
+            position.push_back(p);
+
+            ++index;
+          }
+
+          return res;
+        },
+        [&data]() { return 5 * *max_element(data.cbegin(), data.cend()); },
+        {vertexShaderSource.head_pos_pv_color, vertexShaderSource.main_begin,
+         vertexShaderSource.main_color, vertexShaderSource.main_end},
+        {fragmentShaderSource}, type_list<float[3]>{});
   }
 }
 
