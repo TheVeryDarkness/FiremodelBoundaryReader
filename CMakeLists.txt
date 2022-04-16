@@ -12,8 +12,10 @@ endif()
 
 add_executable(reader main.cpp)
 
-find_package(glad CONFIG REQUIRED)
-target_link_libraries(reader PRIVATE glad::glad)
+if(GRAPHICS_ENABLED)
+    find_package(glad CONFIG REQUIRED)
+    target_link_libraries(reader PRIVATE glad::glad)
 
-find_package(glfw3 CONFIG REQUIRED)
-target_link_libraries(reader PRIVATE glfw)
+    find_package(glfw3 CONFIG REQUIRED)
+    target_link_libraries(reader PRIVATE glfw)
+endif()

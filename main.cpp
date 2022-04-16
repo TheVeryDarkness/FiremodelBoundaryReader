@@ -8,6 +8,7 @@
 /// FDS_User_Guide.pdf. As for opengl, most of the codes about opengl are
 /// adapted from https://github.com/JoeyDeVries/LearnOpenGL.
 #include "analysis.hpp"
+#include "fs.hpp"
 #include "graphics.hpp"
 #include "io.hpp"
 #include "types.hpp"
@@ -175,6 +176,8 @@ s - Select a file to read.
 r - Read file with specified name.
 c - Change current working directory.
 p - Change current directory to parent directory if there is one.
+a - Analyze data from other files.
+S - Execute a script.
 q - quit
 )";
   cout << help;
@@ -187,85 +190,48 @@ q - quit
     cin >> opt;
     switch (opt) {
     case 'd': {
-      size_t i = 0;
-      vector<directory_entry> entries;
-      for (const auto &entry : di)
-        if (entry.is_directory()) {
-          cout << i << " - " << entry.path().generic_string() << endl;
-          entries.push_back(entry);
-          ++i;
-        }
-      if (entries.empty()) {
-        cout << "No sub-directory found." << endl;
-        break;
-      }
-      cout << "Directory index(Invalid index to discard): ";
-      cin >> i;
-      if (i < entries.size())
-        current_path(entries[i]);
+      auto dir = request_file_by_id(
+          di, [](const directory_entry &entry) { return entry.is_directory(); },
+          "sub-directory");
+      if (dir.has_value())
+        current_path(dir.value());
     } break;
     case 's': {
-      vector<path> files;
-      for (const auto &entry : di) {
-        const auto &path = entry.path();
-        if (path.extension() == ".bf") {
-          files.push_back(path);
-        }
+      auto bf = request_file_by_id(
+          di,
+          [](const directory_entry &entry) {
+            return entry.path().extension() == ".bf";
+          },
+          ".bf file");
+
+      if (bf.has_value()) {
+        auto entry = bf.value();
+        auto fin = ifstream(entry.path(), ios::binary);
+        if (fin.is_open())
+          return fin;
+        cout << "Failed to open." << endl;
       }
-      cout << "There are " << files.size()
-           << " .bf files in total in current directory." << endl;
-      if (files.empty()) {
-        cout << ".bf files not found in current directory." << endl;
-        continue;
-      }
-      size_t i = 0;
-      for (const auto &file : files) {
-        cout << i << " - " << file.string() << endl;
-        ++i;
-      }
-      cout << "File index: ";
-      cin >> i;
-      if (i >= files.size()) {
-        cout << "Not a valid file index." << endl;
-        continue;
-      }
-      auto fin = ifstream(files[i], ios::binary);
-      if (fin.is_open())
-        return fin;
-      cout << "Failed to open." << endl;
-      continue;
+    } break;
+    case 'a': {
+      analyze<false>({}, {}, {});
     } break;
     case 'c': {
-      cout << "Directory: ";
-      string s;
-      getline(cin, s);
-      if (s.empty())
-        getline(cin, s);
-      path p = s;
-      if (is_directory(p))
-        current_path(p);
-      else
-        cout << "Not a directory." << endl;
+      auto dir = request_file_by_name(
+          [](const path &p) { return is_directory(p); }, "directory");
+      if (dir.has_value())
+        current_path(dir.value());
     } break;
     case 'r': {
-      cout << "File: ";
-      string s;
-      getline(cin, s);
-      if (s.empty())
-        getline(cin, s);
-      path p = s;
-      if (is_regular_file(p))
-        current_path(p);
-      else {
-        cout << "Not a file." << endl;
-        continue;
-      }
+      auto opt = request_file_by_name(
+          [](const path &p) { return is_regular_file(p); }, "directory");
 
-      auto fin = ifstream(p, ios::binary);
-      if (fin.is_open())
-        return fin;
-      cout << "Failed to open." << endl;
-      continue;
+      if (opt.has_value()) {
+        auto f = opt.value();
+        auto fin = ifstream(f, ios::binary);
+        if (fin.is_open())
+          return fin;
+        cout << "Failed to open." << endl;
+      }
     } break;
     case 'p': {
       current_path(current_path().parent_path());
@@ -278,189 +244,6 @@ q - quit
     case 'h': {
       cout << help;
     } break;
-    }
-  }
-}
-
-static inline void analyze_patch(const vector<patch_info> &patches,
-                                 const vector<frame> &frames, u32 i_patch) {
-  const auto &patch = patches[i_patch];
-  vector<float> data;
-  vector<u32> sizes;
-  while (true) {
-    cout << R"(
-Commands:
-m - Show current dimensions.
-p - Print current result to console.
-P - Set default flaot-point number precision.
-w - Input in console to overlap current result.
-f - Flatten current result to specified dimension.
-s - Take patch data in a frame as current result.
-S - Sample.
-B - Save current result as binary to file.
-C - Save current result as CSV file.
-a - Calculate average on specified dimension of current result.
-A - Copy data in all frames of this patch as current result.)"
-#if GRAPHICS_ENABLED
-            R"("
-v - Visualize current result.)"
-#endif // GRAPHICS_ENABLED
-            R"(
-d - Discard.
-)";
-    char opt = 'd';
-    cin >> opt;
-    switch (opt) {
-    case 'd':
-      return;
-    case 'w': {
-      cout << "Size(0 to stop): ";
-      u32 sz = 0;
-      sizes.clear();
-      do {
-        sz = 0;
-        cin >> sz;
-        if (sz == 0)
-          break;
-        sizes.push_back(sz);
-      } while (true);
-
-      u32 data_size = array_stride(sizes, 0);
-
-      float e = 0.f;
-      data.clear();
-      data.reserve(data_size);
-      while (data.size() < data_size) {
-        cin >> e;
-        data.push_back(e);
-      }
-    } break;
-    case 'm': {
-      if (sizes.empty())
-        break;
-      auto begin = sizes.cbegin(), end = sizes.cend();
-      cout << *begin;
-      ++begin;
-      for (; begin != end; ++begin)
-        cout << '*' << *begin;
-    } break;
-    case 'p': {
-      u16 precision = input_precision();
-      cout << setprecision(precision);
-
-      auto [m, n] = get_matrix_size(sizes);
-      if (n != 0)
-        print_patch(data, m, n);
-    } break;
-    case 'P': {
-      u16 precision = input_precision();
-      set_default_precision(precision);
-    } break;
-    case 'l':
-      reduce_dimension(sizes, 1);
-      if (sizes.size() > 1)
-        cout << "Linearization failed. Current dimension is " << sizes.size()
-             << "." << endl;
-      break;
-    case 's': {
-      cout << "Frame index: ";
-      auto f = frames.size();
-      cin >> f;
-      if (f >= frames.size()) {
-        cout << "Frame index invalid." << endl;
-        break;
-      }
-      data = frames[f].data[i_patch].data;
-      sizes = {patch.K(), patch.J(), patch.I()};
-    } break;
-    case 'S': {
-      size_t dimension = -1;
-      cin >> dimension;
-      if (dimension >= sizes.size() || sizes.size() == 1) {
-        cout << "Dimension invalid." << endl;
-        break;
-      }
-      const auto sz = sizes[dimension];
-      cout << "Size of this dimension: " << sz << endl;
-      vector<u32> pos;
-      while (true) {
-        u32 i = -1;
-        cin >> i;
-        if (i >= sz)
-          break;
-        pos.push_back(i);
-      }
-
-      data = sample(data, sizes, dimension, pos);
-      sizes[dimension] = (u32)pos.size();
-
-    } break;
-#if GRAPHICS_ENABLED
-    case 'v': {
-      if (!data.empty()) {
-        auto [m, n] = get_matrix_size(sizes);
-        visualize_data(data, m, n);
-      }
-    } break;
-#endif // GRAPHICS_ENABLED
-    case 'B': {
-      cout << "File name: ";
-      string path;
-      getline(cin, path);
-      ofstream fout(path, ios::binary);
-      if (!fout) {
-        cout << "Failed to open file." << endl;
-        break;
-      }
-      save_patch_as_binary(data, sizes, fout);
-    } break;
-    case 'C': {
-      cout << "File name: ";
-      string path;
-      getline(cin, path);
-      ofstream fout(path);
-      if (!fout) {
-        cout << "Failed to open file." << endl;
-        break;
-      }
-
-      u16 precision = input_precision();
-      fout << setprecision(precision);
-
-      auto [m, n] = get_matrix_size(sizes);
-      save_patch_as_csv_text(data, m, n, fout);
-    } break;
-    case 'f': {
-      size_t d = 2;
-      cin >> d;
-      reduce_dimension(sizes, d);
-      if (sizes.size() > d)
-        cout << "Flattening failed. Current dimension is " << sizes.size()
-             << "." << endl;
-    } break;
-    case 'a': {
-      // Consider [l][m][n]
-      size_t dimension = -1;
-      cin >> dimension;
-      if (dimension >= sizes.size() || sizes.size() == 1) {
-        cout << "Dimension invalid." << endl;
-        break;
-      }
-      data = average(data, sizes, dimension);
-      sizes.erase(sizes.cbegin() + dimension);
-
-    } break;
-    case 'A': {
-      sizes = {(u32)frames.size(), patch.K(), patch.J(), patch.I()};
-      data.clear();
-      data.reserve(array_stride(sizes, 0));
-      for (const auto &frame : frames) {
-        const auto &patch = frame.data[i_patch];
-        data.insert(data.cend(), patch.data.cbegin(), patch.data.cend());
-      }
-    } break;
-    default:
-      break;
     }
   }
 }
@@ -482,7 +265,7 @@ static inline void select_patch(const vector<patch_info> &patches,
     return;
   }
 
-  analyze_patch(patches, frames, p);
+  analyze<true>(patches, frames, p);
 }
 
 /// @retval Whether to quit.

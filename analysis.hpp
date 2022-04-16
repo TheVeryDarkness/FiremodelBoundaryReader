@@ -1,4 +1,5 @@
 #pragma once
+#include "fs.hpp"
 #include "io.hpp"
 #include "proxy.hpp"
 #include "types.hpp"
@@ -8,12 +9,16 @@
 #include <iostream>
 #include <vector>
 
+using std::conditional_t;
 using std::cout;
 using std::decay_t;
 using std::endl;
+using std::ifstream;
+using std::ios;
 using std::ofstream;
 using std::ostream;
 using std::setprecision;
+using std::stringstream;
 using std::tuple;
 
 static inline u16 default_precision = 0;
@@ -41,6 +46,34 @@ static inline void as_csv(ostream &o, const vector<float> &data, u32 m, u32 n,
       o << sep;
   }
   o << endl;
+}
+
+template <size_t sz = 2>
+static inline tuple<vector<float>, u32, u32>
+from_csv(istream &in, const char (&sep)[sz] = ",") {
+  tuple<vector<float>, u32, u32> res;
+  auto &[vec, m, n] = res;
+
+  while (in) {
+    string line;
+    getline(in, line);
+    stringstream ss(line);
+
+    size_t i = 0;
+    float e;
+    ss >> e;
+    vec.push_back(e);
+    while (ss) {
+      check(in, sep);
+      ss >> e;
+      vec.push_back(e);
+      ++i;
+    }
+    if (i != n)
+      throw file_error();
+  }
+
+  return res;
 }
 
 static inline void print_patch(const vector<float> &data, u32 m, u32 n) {
@@ -202,4 +235,220 @@ static inline vector<float> sample(const vector<float> &data,
   }
 
   return new_result;
+}
+
+template <bool frames_read>
+static inline void
+analyze(const conditional_t<frames_read, vector<patch_info>, tuple<>> &patches,
+        const conditional_t<frames_read, vector<frame>, tuple<>> &frames,
+        conditional_t<frames_read, u32, tuple<>> i_patch) {
+  vector<float> data;
+  vector<u32> sizes;
+  while (true) {
+    cout << R"(
+Commands:
+m - Show current dimensions.
+p - Print current result to console.
+P - Set default flaot-point number precision.
+w - Input in console to overlap current result.
+f - Flatten current result to specified dimension.
+s - Sample.
+B - Save current result as binary to file.
+c - Read CSV file as current result.
+C - Save current result as CSV file.
+a - Calculate average on specified dimension of current result.)";
+
+    if constexpr (frames_read)
+      cout <<
+          R"(
+t - Copy patch data in a frame as current result.
+T - Copy data in all frames of this patch as current result.)";
+
+    cout <<
+#if GRAPHICS_ENABLED
+        R"("
+v - Visualize current result.)"
+#endif // GRAPHICS_ENABLED
+        R"(
+d - Discard.
+)";
+    char opt = 'd';
+    cin >> opt;
+    switch (opt) {
+    case 'd':
+      return;
+    case 'w': {
+      cout << "Size(0 to stop): ";
+      u32 sz = 0;
+      sizes.clear();
+      do {
+        sz = 0;
+        cin >> sz;
+        if (sz == 0)
+          break;
+        sizes.push_back(sz);
+      } while (true);
+
+      u32 data_size = array_stride(sizes, 0);
+
+      float e = 0.f;
+      data.clear();
+      data.reserve(data_size);
+      while (data.size() < data_size) {
+        cin >> e;
+        data.push_back(e);
+      }
+    } break;
+    case 'm': {
+      if (sizes.empty())
+        break;
+      auto begin = sizes.cbegin(), end = sizes.cend();
+      cout << *begin;
+      ++begin;
+      for (; begin != end; ++begin)
+        cout << '*' << *begin;
+    } break;
+    case 'p': {
+      u16 precision = input_precision();
+      cout << setprecision(precision);
+
+      auto [m, n] = get_matrix_size(sizes);
+      if (n != 0)
+        print_patch(data, m, n);
+    } break;
+    case 'P': {
+      u16 precision = input_precision();
+      set_default_precision(precision);
+    } break;
+    case 'l':
+      reduce_dimension(sizes, 1);
+      if (sizes.size() > 1)
+        cout << "Linearization failed. Current dimension is " << sizes.size()
+             << "." << endl;
+      break;
+    case 'S': {
+      size_t dimension = -1;
+      cin >> dimension;
+      if (dimension >= sizes.size() || sizes.size() == 1) {
+        cout << "Dimension invalid." << endl;
+        break;
+      }
+      const auto sz = sizes[dimension];
+      cout << "Size of this dimension: " << sz << endl;
+      vector<u32> pos;
+      while (true) {
+        u32 i = -1;
+        cin >> i;
+        if (i >= sz)
+          break;
+        pos.push_back(i);
+      }
+
+      data = sample(data, sizes, dimension, pos);
+      sizes[dimension] = (u32)pos.size();
+
+    } break;
+#if GRAPHICS_ENABLED
+    case 'v': {
+      if (!data.empty()) {
+        auto [m, n] = get_matrix_size(sizes);
+        if (!n)
+          break;
+        visualize_data(data, m, n);
+      }
+    } break;
+#endif // GRAPHICS_ENABLED
+    case 'B': {
+      cout << "File name: ";
+      string path;
+      getline(cin, path);
+      ofstream fout(path, ios::binary);
+      if (!fout) {
+        cout << "Failed to open file." << endl;
+        break;
+      }
+      save_patch_as_binary(data, sizes, fout);
+    } break;
+    case 'c': {
+      auto opt = request_file_by_name(
+          [](const path &p) { return is_directory(p); }, "csv file");
+      if (opt.has_value()) {
+        auto path = opt.value();
+        ifstream fin = ifstream(path);
+        if (!fin) {
+          cout << "Failed to open file." << endl;
+          break;
+        }
+
+        auto [_data, _m, _n] = from_csv(fin);
+        data = std::move(_data);
+        sizes = {_m, _n};
+      }
+    } break;
+    case 'C': {
+      cout << "File name: ";
+      string path;
+      getline(cin, path);
+      ofstream fout(path);
+      if (!fout) {
+        cout << "Failed to open file." << endl;
+        break;
+      }
+
+      u16 precision = input_precision();
+      fout << setprecision(precision);
+
+      auto [m, n] = get_matrix_size(sizes);
+      save_patch_as_csv_text(data, m, n, fout);
+    } break;
+    case 'f': {
+      size_t d = 2;
+      cin >> d;
+      reduce_dimension(sizes, d);
+      if (sizes.size() > d)
+        cout << "Flattening failed. Current dimension is " << sizes.size()
+             << "." << endl;
+    } break;
+    case 'a': {
+      // Consider [l][m][n]
+      size_t dimension = -1;
+      cin >> dimension;
+      if (dimension >= sizes.size() || sizes.size() == 1) {
+        cout << "Dimension invalid." << endl;
+        break;
+      }
+      data = average(data, sizes, dimension);
+      sizes.erase(sizes.cbegin() + dimension);
+
+    } break;
+    case 't':
+      if constexpr (frames_read) {
+        const auto &patch = patches[i_patch];
+        cout << "Frame index: ";
+        auto f = frames.size();
+        cin >> f;
+        if (f >= frames.size()) {
+          cout << "Frame index invalid." << endl;
+          break;
+        }
+        data = frames[f].data[i_patch].data;
+        sizes = {patch.K(), patch.J(), patch.I()};
+      }
+      break;
+    case 'T':
+      if constexpr (frames_read) {
+        const auto &patch = patches[i_patch];
+        sizes = {(u32)frames.size(), patch.K(), patch.J(), patch.I()};
+        data.clear();
+        data.reserve(array_stride(sizes, 0));
+        for (const auto &frame : frames) {
+          const auto &patch = frame.data[i_patch];
+          data.insert(data.cend(), patch.data.cbegin(), patch.data.cend());
+        }
+      }
+      break;
+    default:
+      break;
+    }
+  }
 }

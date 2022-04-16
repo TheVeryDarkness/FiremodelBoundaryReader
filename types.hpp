@@ -6,10 +6,7 @@ using std::exception;
 using std::vector;
 class file_error : std::exception {
 public:
-  const char *what() const noexcept {
-    return "File is not correct. Maybe something unexpected happened when "
-           "running fds.";
-  }
+  const char *what() const noexcept { return "File is not correct. Check it."; }
 };
 class stream_error : std::exception {
 public:

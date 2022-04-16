@@ -35,5 +35,8 @@
     <ClInclude Include="proxy.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="fs.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

@@ -148,6 +148,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="analysis.hpp" />
+    <ClInclude Include="fs.hpp" />
     <ClInclude Include="graphics.hpp" />
     <ClInclude Include="io.hpp" />
     <ClInclude Include="proxy.hpp" />

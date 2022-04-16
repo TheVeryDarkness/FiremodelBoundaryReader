@@ -518,8 +518,7 @@ static inline int visualize(GetData &&getData, GetFar &&getFar,
   DETECT_ERROR;
 
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-  glBufferData(GL_ELEMENT_ARRAY_BUFFER,
-               indices.size() * sizeof(decltype(indices)::value_type),
+  glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(Index),
                indices.data(), GL_STATIC_DRAW);
 
   DETECT_ERROR;
@@ -790,38 +789,49 @@ static inline int visualize_data(const vector<float> &data, u32 m, u32 n) {
           position.reserve(data.size() * 3);
           indices.reserve(wireframe ? indices.size() * 4 : indices.size() * 6);
 
-          size_t index = 0;
+          u32 index = 0;
           for (const auto &p : data) {
             auto i = index / n, j = index % n;
             if (j != 0)
               if (wireframe) {
+                // 1
+                // 2
+                indices.push_back(i * n + j);
                 indices.push_back(i * n + j - 1);
-                indices.push_back(i * n + j);
               }
-            if (i != 0)
+            if (i != 0) {
               if (wireframe) {
+                // 2 1
                 indices.push_back(i * n + j);
-                indices.push_back((i - 1) * n);
+                indices.push_back((i - 1) * n + j);
               } else {
+                //   2
+                // 3 1
                 indices.push_back(i * n + j);
                 indices.push_back(i * n + j + 1);
                 indices.push_back((i - 1) * n + j);
-
+                // 2 1
+                // 3
                 indices.push_back(i * n + j + 1);
                 indices.push_back((i - 1) * n + j + 1);
                 indices.push_back((i - 1) * n + j);
               }
+            }
 
-            position.push_back(i);
-            position.push_back(j);
-            position.push_back(p);
+            position.push_back((float)i);
+            position.push_back((float)j);
+            position.push_back((float)p);
 
             ++index;
           }
 
           return res;
         },
-        [&data]() { return 5 * *max_element(data.cbegin(), data.cend()); },
+        [&data, m, n]() {
+          return 5 * max(initializer_list<float>{
+                         *max_element(data.cbegin(), data.cend()), (float)m,
+                         (float)n});
+        },
         {vertexShaderSource.head_pos_pv_color, vertexShaderSource.main_begin,
          vertexShaderSource.main_color, vertexShaderSource.main_end},
         {fragmentShaderSource}, type_list<float[3]>{});
