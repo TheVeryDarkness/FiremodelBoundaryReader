@@ -20,6 +20,7 @@ using std::ostream;
 using std::setprecision;
 using std::stringstream;
 using std::tuple;
+using std::filesystem::exists;
 
 static inline u16 default_precision = 0;
 static inline u16 input_precision() {
@@ -386,9 +387,11 @@ d - Discard.
       }
     } break;
     case 'C': {
-      cout << "File name: ";
-      string path;
-      getline(cin, path);
+      optional<path> opt = request_file_by_name(
+          [](const path &p) { return exists(p); }, "existed");
+      if (!opt)
+        break;
+      auto &path = opt.value();
       ofstream fout(path);
       if (!fout) {
         cout << "Failed to open file." << endl;

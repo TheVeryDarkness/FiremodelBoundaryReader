@@ -46,6 +46,6 @@ static inline optional<path> request_file_by_name(Pred &&pred,
   path p = s;
   if (pred(p))
     return p;
-  cout << "Not a " << type << "." << endl;
+  cout << "Not " << type << "." << endl;
   return {};
 }

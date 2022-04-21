@@ -268,6 +268,43 @@ static inline void select_patch(const vector<patch_info> &patches,
   analyze<true>(patches, frames, p);
 }
 
+static inline tuple<array<char, 30 + 1>, array<char, 30 + 1>,
+                    array<char, 30 + 1>, vector<patch_info>, vector<frame>>
+read_file_with_mode(istream &fin) {
+
+  cout << R"(
+h - Header only.
+p - Header and patches.
+f - Header, patches and all frames.
+d - Discard.
+)";
+  char c = 'd';
+  cin >> c;
+  switch (c) {
+  case 'h': {
+    cout << "Reading started." << endl;
+    auto &&[label, bar_label, units] = read_file_header(fin);
+    cout << "Reading finished." << endl;
+    return {std::move(label), std::move(bar_label), std::move(units), {}, {}};
+  } break;
+  case 'p': {
+    cout << "Reading started." << endl;
+    auto [label, bar_label, units, patches] = read_file_header_and_patches(fin);
+    cout << "Reading finished." << endl;
+    return {std::move(label), std::move(bar_label), std::move(units), {}, {}};
+  } break;
+  case 'f': {
+    cout << "Reading started." << endl;
+    auto [label, bar_label, units, patches, frames] = read_file(fin);
+    cout << "Reading finished." << endl;
+    return {std::move(label), std::move(bar_label), std::move(units),
+            std::move(patches), std::move(frames)};
+  } break;
+  default:
+    return {};
+  }
+}
+
 /// @retval Whether to quit.
 /// @param label Boundary quantity label.
 /// @param bar_label Boundary quantity label shown on the bar.
@@ -275,37 +312,42 @@ static inline void select_patch(const vector<patch_info> &patches,
 /// @param patches Information of patches stored in the .bf file.
 /// @param frames Information and boundary quantity data of frames stored in the
 /// .bf file.
-template <bool patches_read, bool frames_read>
-static inline bool process_file(
-    const array<char, 30 + 1> &label, const array<char, 30 + 1> &bar_label,
-    const array<char, 30 + 1> &units,
-    const conditional_t<patches_read, vector<patch_info>, tuple<>> &patches,
-    const conditional_t<frames_read, vector<frame>, tuple<>> &frames) {
-  auto help = []() {
+static inline void process_file() {
+  tuple<array<char, 30 + 1>, array<char, 30 + 1>, array<char, 30 + 1>,
+        vector<patch_info>, vector<frame>>
+      data;
+  auto &[label, bar_label, units, patches, frames] = data;
+
+  auto help = [&]() {
+    auto &[label, bar_label, units, patches, frames] = data;
+
     cout <<
         R"(
 Commands: 
 q - Quit.
 h - Show this help.
-u - Unload file.
+r - Read file. Will override the file that was read before if there is one.
+u - Unload file.)";
+    if (label.front() && bar_label.front() && units.front())
+      R"(
 b - Show boundary quantity basic information.)";
 
-    if constexpr (frames_read)
+    if (!frames.empty())
       cout << R"(
 f - Show frames.
 F - Search for frame.)";
 
-    if constexpr (patches_read)
+    if (!patches.empty())
       cout << R"(
 p - Show patches.
 P - Search for Patch.)"
 #if GRAPHICS_ENABLED
               R"(
-g - Visualize patches geometry.)"
+v - Visualize patches geometry.)"
 #endif // GRAPHICS_ENABLED
           ;
 
-    if constexpr (patches_read && frames_read)
+    if (!patches.empty() && !frames.empty())
       cout << R"(
 a - Analyze patch data.)";
 
@@ -318,46 +360,60 @@ a - Analyze patch data.)";
     cin >> op1;
     switch (op1) {
     case 'q':
-      return true;
-    case 'u':
-      return false;
+      return;
+    case 'u': {
+      label.front() = bar_label.front() = units.front() = '\0';
+      patches.clear();
+      frames.clear();
+    }
+    case 'r': {
+      auto in = select_file();
+      if (!in.has_value())
+        break;
+      auto &fin = in.value();
+      fin.peek();
+      if (!fin) {
+        cout << "Failed to open the file." << endl;
+      }
+      data = read_file_with_mode(fin);
+    } break;
     case 'b': {
       print_header(cout, label, bar_label, units);
     } break;
     case 'a': {
-      if constexpr (patches_read && frames_read)
+      if (!patches.empty() && !frames.empty())
         select_patch(patches, frames);
       else
         goto CMDNF;
     } break;
     case 'f': {
-      if constexpr (frames_read)
+      if (!frames.empty())
         print_frames(cout, frames);
       else
         goto CMDNF;
     } break;
 #if GRAPHICS_ENABLED
-    case 'g': {
-      if constexpr (patches_read)
+    case 'v': {
+      if (!patches.empty())
         visualize_patch(patches);
       else
         goto CMDNF;
     } break;
 #endif // GRAPHICS_ENABLED
     case 'p': {
-      if constexpr (patches_read)
+      if (!patches.empty())
         print_patches(cout, patches);
       else
         goto CMDNF;
     } break;
     case 'F': {
-      if constexpr (frames_read)
+      if (!frames.empty())
         search_frame(frames);
       else
         goto CMDNF;
     } break;
     case 'P': {
-      if constexpr (patches_read)
+      if (!patches.empty())
         search_patch(patches);
       else
         goto CMDNF;
@@ -375,87 +431,33 @@ a - Analyze patch data.)";
 }
 
 int main(int argc, char *argv[]) {
-  if (argc >= 2) {
-    if (strcmp(argv[1], "--") == 0) {
-      clog << "Forwarding command line arguments." << endl;
-      for (int i = 2; i < argc; ++i) {
-        cin << argv[i];
-        cin.endl();
+  try {
+    if (argc >= 2) {
+      if (strcmp(argv[1], "--") == 0) {
+        clog << "Forwarding command line arguments." << endl;
+        for (int i = 2; i < argc; ++i) {
+          cin << argv[i];
+          cin.endl();
+        }
+      } else if (strcmp(argv[1], "-s") == 0) {
+        ifstream fin(argv[2]);
+        if (!fin) {
+          cerr << "Failed to open the script." << endl;
+          return -1;
+        }
+        clog << "Loading script." << endl;
+        string file;
+        getline(fin, file, (char)char_traits<char>::eof());
+      } else {
+        clog << "Command line arguments ignored." << endl;
       }
-    } else if (strcmp(argv[1], "-s") == 0) {
-      ifstream fin(argv[2]);
-      if (!fin) {
-        cerr << "Failed to open the script." << endl;
-        return -1;
-      }
-      clog << "Loading script." << endl;
-      string file;
-      getline(fin, file, (char)char_traits<char>::eof());
-    } else {
-      clog << "Command line arguments ignored." << endl;
     }
-  }
 
-  while (true) {
-    try {
-      cerr << hex;
+    cerr << hex;
+    process_file();
 
-      auto in = select_file();
-      if (!in.has_value())
-        return 1;
-      auto &fin = in.value();
-      fin.peek();
-      if (!fin) {
-        cout << "Failed to open the file." << endl;
-      }
-
-      cout << R"(
-h - Header only.
-p - Header and patches.
-f - Header, patches and all frames.
-d - Discard.
-)";
-      char c = 'd';
-      cin >> c;
-      switch (c) {
-      case 'h': {
-        cout << "Reading started." << endl;
-        auto [label, bar_label, units] = read_file_header(fin);
-        cout << "Reading finished." << endl;
-
-        bool quitting =
-            process_file<false, false>(label, bar_label, units, {}, {});
-        if (quitting)
-          return 0;
-      } break;
-      case 'p': {
-        cout << "Reading started." << endl;
-        auto [label, bar_label, units, patches] =
-            read_file_header_and_patches(fin);
-        cout << "Reading finished." << endl;
-
-        bool quitting =
-            process_file<true, false>(label, bar_label, units, patches, {});
-        if (quitting)
-          return 0;
-      } break;
-      case 'f': {
-        cout << "Reading started." << endl;
-        auto [label, bar_label, units, patches, frames] = read_file(fin);
-        cout << "Reading finished." << endl;
-
-        bool quitting =
-            process_file<true, true>(label, bar_label, units, patches, frames);
-        if (quitting)
-          return 0;
-      } break;
-      default:
-        break;
-      }
-
-    } catch (const exception &e) {
-      cerr << "Exception caught: " << e.what() << endl;
-    }
+  } catch (const exception &e) {
+    cerr << "Exception caught: " << e.what() << endl;
   }
 
   return 0;
