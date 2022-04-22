@@ -38,7 +38,7 @@ request_file_by_id(directory_iterator di, Pred &&pred, const char *type) {
 template <typename Pred>
 static inline optional<path> request_file_by_name(Pred &&pred,
                                                   const char *type) {
-  cout << "Path: ";
+  cout << "Path to " << type << " file: ";
   string s;
   getline(cin, s);
   if (s.empty())

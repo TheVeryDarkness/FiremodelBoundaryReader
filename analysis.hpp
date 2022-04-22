@@ -250,7 +250,7 @@ analyze(const conditional_t<frames_read, vector<patch_info>, tuple<>> &patches,
 Commands:
 m - Show current dimensions.
 p - Print current result to console.
-P - Set default flaot-point number precision.
+P - Set default float-point number precision.
 w - Input in console to overlap current result.
 f - Flatten current result to specified dimension.
 s - Sample.

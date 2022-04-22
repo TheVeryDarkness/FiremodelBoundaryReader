@@ -11,6 +11,7 @@
 #include "fs.hpp"
 #include "graphics.hpp"
 #include "io.hpp"
+#include "tool.hpp"
 #include "types.hpp"
 #include <array>
 #include <cassert>
@@ -305,6 +306,44 @@ d - Discard.
   }
 }
 
+/// @brief Read nodes and elements information from user-selected files.
+/// @return Tuple that contains nodes coordinates, vertices counts, vertex
+/// indices.
+static inline tuple<vector<float>, vector<u32>, vector<u32>>
+read_nodes_and_elements() {
+  char opt = 'd';
+  cout << R"(
+s - Standard format.
+a - ANSYS mapdl file.
+)";
+  cin >> opt;
+  switch (opt) {
+  case 's': {
+    auto opt_nodes =
+        request_file_by_name([](const path &p) { return exists(p); }, "nodes");
+    auto opt_elems = request_file_by_name(
+        [](const path &p) { return exists(p); }, "elements");
+    if (!opt_nodes || !opt_elems)
+      return {};
+    auto in_nodes = ifstream(opt_nodes.value());
+    auto in_elems = ifstream(opt_elems.value());
+    auto nodes = read_nodes(in_nodes);
+    auto [elems, sizes] = read_elements(in_elems);
+    return {std::move(nodes), std::move(elems), std::move(sizes)};
+  }
+  case 'a': {
+    auto opt_apdl =
+        request_file_by_name([](const path &p) { return exists(p); }, "APDL");
+    if (!opt_apdl)
+      return {};
+    auto in = ifstream(opt_apdl.value());
+    return read_mapdl(in);
+  }
+  default:
+    return {};
+  }
+}
+
 /// @retval Whether to quit.
 /// @param label Boundary quantity label.
 /// @param bar_label Boundary quantity label shown on the bar.
@@ -327,6 +366,7 @@ Commands:
 q - Quit.
 h - Show this help.
 r - Read file. Will override the file that was read before if there is one.
+n - Visualize some nodes.
 u - Unload file.)";
     if (label.front() && bar_label.front() && units.front())
       R"(
@@ -365,7 +405,7 @@ a - Analyze patch data.)";
       label.front() = bar_label.front() = units.front() = '\0';
       patches.clear();
       frames.clear();
-    }
+    } break;
     case 'r': {
       auto in = select_file();
       if (!in.has_value())
@@ -376,6 +416,14 @@ a - Analyze patch data.)";
         cout << "Failed to open the file." << endl;
       }
       data = read_file_with_mode(fin);
+    } break;
+    case 'n': {
+      auto [nodes, sizes, elems] = read_nodes_and_elements();
+      if (nodes.empty() || sizes.empty() || elems.empty()) {
+        cout << "Element data not valid." << endl;
+        break;
+      }
+      visualize_3d_nodes(nodes, sizes, elems);
     } break;
     case 'b': {
       print_header(cout, label, bar_label, units);
@@ -448,6 +496,8 @@ int main(int argc, char *argv[]) {
         clog << "Loading script." << endl;
         string file;
         getline(fin, file, (char)char_traits<char>::eof());
+        cin << file;
+        cin.endl();
       } else {
         clog << "Command line arguments ignored." << endl;
       }

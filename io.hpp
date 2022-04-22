@@ -6,6 +6,7 @@
 
 using std::array;
 using std::cerr;
+using std::char_traits;
 using std::decay_t;
 using std::endl;
 using std::istream;
@@ -13,6 +14,7 @@ using std::numeric_limits;
 using std::ostream;
 using std::setw;
 using std::tuple;
+using std::ws;
 
 template <size_t sz> static inline void read(istream &in, array<char, sz> &s) {
   CHECK_STREAM(in);
@@ -95,7 +97,9 @@ static inline std::int32_t read_int32(istream &in) {
   return static_cast<std::int32_t>(read_integer<std::uint32_t>(in));
 }
 
-std::float_t read_float(istream &in) { return read_integer<std::float_t>(in); }
+static inline std::float_t read_float(istream &in) {
+  return read_integer<std::float_t>(in);
+}
 
 static inline tuple<array<char, 30 + 1>, array<char, 30 + 1>,
                     array<char, 30 + 1>>
@@ -196,7 +200,7 @@ read_file(istream &fin) {
                         std::make_tuple(std::move(patches), std::move(frames)));
 }
 
-ostream &operator<<(ostream &o, const patch_info &patch) {
+static inline ostream &operator<<(ostream &o, const patch_info &patch) {
   write_number(o, patch.I1);
   write_number(o, patch.I2);
   write_number(o, patch.J1);
@@ -210,15 +214,15 @@ ostream &operator<<(ostream &o, const patch_info &patch) {
   return o;
 }
 
-void print_header(ostream &o, const array<char, 30 + 1> &label,
-                  const array<char, 30 + 1> &bar_label,
-                  const array<char, 30 + 1> &units) {
+static inline void print_header(ostream &o, const array<char, 30 + 1> &label,
+                                const array<char, 30 + 1> &bar_label,
+                                const array<char, 30 + 1> &units) {
   write_line(o << "Label:     ", label);
   write_line(o << "Bar Label: ", bar_label);
   write_line(o << "Units:     ", units);
 }
 
-void print_patches(ostream &o, const vector<patch_info> patches) {
+static inline void print_patches(ostream &o, const vector<patch_info> patches) {
   constexpr auto int_len = numeric_limits<i32>::digits10 + 1;
   constexpr auto uint_len = numeric_limits<u32>::digits10 + 1;
   o << setw(uint_len) << "I1"
@@ -236,7 +240,7 @@ void print_patches(ostream &o, const vector<patch_info> patches) {
     o << patch << endl;
 }
 
-void print_frames(ostream &o, const vector<frame> frames) {
+static inline void print_frames(ostream &o, const vector<frame> frames) {
   size_t i = 0;
   for (const auto &f : frames) {
     o << "Frame " << i << " at " << f.time << "s." << endl;
@@ -244,11 +248,46 @@ void print_frames(ostream &o, const vector<frame> frames) {
   }
 }
 
-template <typename Ty> void write_binary(ostream &o, Ty &&data) {
+template <typename Ty> static inline void write_binary(ostream &o, Ty &&data) {
   o.write(reinterpret_cast<const char *>(&data), sizeof(data));
 }
 template <typename Ty>
-void write_vector_binary(ostream &o, const vector<Ty> &data) {
+static inline void write_vector_binary(ostream &o, const vector<Ty> &data) {
   o.write(reinterpret_cast<const char *>(data.data()),
           sizeof(Ty) * data.size());
+}
+
+static inline vector<float> read_nodes(istream &in) {
+  u32 count = 0;
+  in >> count;
+  string s;
+  getline(in, s);
+  s.clear();
+  vector<float> res;
+  for (u32 i = 0; i < count; ++i) {
+    float x = 0, y = 0, z = 0;
+    in >> x >> y >> z;
+    res.push_back(x);
+    res.push_back(y);
+    res.push_back(z);
+  }
+  return res;
+}
+static inline tuple<vector<u32>, vector<u32>> read_elements(istream &in) {
+  tuple<vector<u32>, vector<u32>> res;
+  auto &[indices, sizes] = res;
+  while (in.peek() != char_traits<char>::eof() && in) {
+    u32 elements_count = 0, vertices_count = 0;
+    in >> elements_count >> vertices_count;
+    for (size_t i = 0; i < elements_count; ++i) {
+      for (size_t j = 0; j < vertices_count; ++j) {
+        u32 index = 0;
+        in >> index;
+        indices.push_back(index);
+      }
+      sizes.push_back(vertices_count);
+    }
+    in >> ws;
+  }
+  return res;
 }
