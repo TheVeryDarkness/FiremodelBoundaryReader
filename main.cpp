@@ -8,10 +8,12 @@
 /// FDS_User_Guide.pdf. As for opengl, most of the codes about opengl are
 /// adapted from https://github.com/JoeyDeVries/LearnOpenGL.
 #include "analysis.hpp"
+#include "apdl_io.hpp"
+#include "elements_io.hpp"
+#include "fds_io.hpp"
 #include "fs.hpp"
 #include "graphics.hpp"
 #include "io.hpp"
-#include "tool.hpp"
 #include "types.hpp"
 #include <array>
 #include <cassert>

@@ -38,7 +38,13 @@
     <ClInclude Include="fs.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="tool.hpp">
+    <ClInclude Include="elements_io.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="fds_io.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="apdl_io.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

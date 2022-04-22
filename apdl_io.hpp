@@ -1,25 +1,13 @@
 #pragma once
-#include "types.hpp"
-#include <fstream>
-#include <iostream>
-#include <string>
-#include <string_view>
-#include <tuple>
-#include <vector>
 
-using std::cerr;
-using std::char_traits;
-using std::endl;
+#include "io.hpp"
+#include <cassert>
+#include <string>
+
+using std::clog;
 using std::getline;
-using std::ifstream;
-using std::isblank;
-using std::isspace;
-using std::istream;
 using std::string;
 using std::string_view;
-using std::tuple;
-using std::vector;
-using std::ws;
 
 template <size_t ParameterCount, bool withSize, size_t SizeAt>
 static inline tuple<vector<u32>, u32> read_element(istream &in, u32 ei) {
