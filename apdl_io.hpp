@@ -53,6 +53,9 @@ static inline tuple<vector<u32>, u32> read_element(istream &in, u32 ei) {
   }
 }
 
+/// @brief Read from mapdl file.
+/// @param in: Stream that reads from mapdl file.
+/// @return Nodes coordinates, vertex count, element vertex indices.
 static inline tuple<vector<float>, vector<u32>, vector<u32>>
 read_mapdl(istream &in) {
   tuple<vector<float>, vector<u32>, vector<u32>> res;

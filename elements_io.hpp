@@ -20,6 +20,9 @@ using std::tuple;
 using std::vector;
 using std::ws;
 
+/// @brief Read nodes data from stream associated with standard file.
+/// @param in: Stream associated with standard file.
+/// @return Nodes coordinates.
 static inline vector<float> read_nodes(istream &in) {
   u32 count = 0;
   in >> count;
@@ -36,6 +39,10 @@ static inline vector<float> read_nodes(istream &in) {
   }
   return res;
 }
+
+/// @brief Read elements data from stream associated with standard file.
+/// @param in: Stream associated with standard file.
+/// @return Indices of Element vertices, count of element vertices.
 static inline tuple<vector<u32>, vector<u32>> read_elements(istream &in) {
   tuple<vector<u32>, vector<u32>> res;
   auto &[indices, sizes] = res;

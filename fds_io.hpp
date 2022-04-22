@@ -78,7 +78,7 @@ static inline vector<frame> read_frames(istream &fin,
 }
 
 /*
- * @retval Label, Bar Label, Units, Patches
+ * @return Label, Bar Label, Units, Patches
  */
 static inline tuple<array<char, 30 + 1>, array<char, 30 + 1>,
                     array<char, 30 + 1>, vector<patch_info>>
@@ -89,7 +89,7 @@ read_file_header_and_patches(istream &fin) {
 }
 
 /*
- * @retval Label, Bar Label, Units, Patches, Frames
+ * @return Label, Bar Label, Units, Patches, Frames
  */
 static inline tuple<array<char, 30 + 1>, array<char, 30 + 1>,
                     array<char, 30 + 1>, vector<patch_info>, vector<frame>>
