@@ -149,12 +149,15 @@
   <ItemGroup>
     <ClInclude Include="analysis.hpp" />
     <ClInclude Include="apdl_io.hpp" />
+    <ClInclude Include="element_basic.hpp" />
     <ClInclude Include="fds_io.hpp" />
+    <ClInclude Include="fds_basic.hpp" />
     <ClInclude Include="fs.hpp" />
     <ClInclude Include="graphics.hpp" />
     <ClInclude Include="io.hpp" />
     <ClInclude Include="proxy.hpp" />
     <ClInclude Include="elements_io.hpp" />
+    <ClInclude Include="shared.hpp" />
     <ClInclude Include="types.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

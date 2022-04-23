@@ -1,4 +1,5 @@
 #pragma once
+#include "fds_basic.hpp"
 #include "types.hpp"
 #include <algorithm>
 #include <functional>
@@ -21,6 +22,7 @@ using std::integral_constant;
 using std::is_invocable_r_v;
 using std::is_same_v;
 using std::make_index_sequence;
+using std::make_tuple;
 using std::map;
 using std::max;
 using std::max_element;
@@ -42,6 +44,8 @@ using std::underlying_type_t;
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #endif // GRAPHICS_ENABLED
+#include "element_basic.hpp"
+#include "shared.hpp"
 
 #if GRAPHICS_ENABLED
 
@@ -85,9 +89,10 @@ static inline bool cursor_enabled = false;
 static inline bool patch_loop = false;
 static inline size_t current = 0;
 static inline size_t patches_count = 0;
+static inline float key_move_sensity = 0.1f;
 
-static inline void onKey(GLFWwindow *window, int key, int scancode, int action,
-                         int mods) {
+static inline void onKey(GLFWwindow *window, const int key, int scancode,
+                         int action, const int mods) {
   if (key == GLFW_KEY_ESCAPE)
     if (action == GLFW_PRESS)
       glfwSetWindowShouldClose(window, true);
@@ -99,6 +104,21 @@ static inline void onKey(GLFWwindow *window, int key, int scancode, int action,
                        cursor_enabled ? GLFW_CURSOR_NORMAL
                                       : GLFW_CURSOR_DISABLED);
     }
+
+  if (action == GLFW_REPEAT) {
+    if (key == GLFW_KEY_LEFT) {
+      cameraPos += glm::cross(cameraUp, cameraFront) * key_move_sensity;
+    }
+    if (key == GLFW_KEY_RIGHT) {
+      cameraPos += glm::cross(cameraFront, cameraUp) * key_move_sensity;
+    }
+    if (key == GLFW_KEY_UP) {
+      cameraPos += cameraFront * key_move_sensity;
+    }
+    if (key == GLFW_KEY_DOWN) {
+      cameraPos -= cameraFront * key_move_sensity;
+    }
+  }
 
   const bool continuous = mods & GLFW_MOD_CAPS_LOCK;
 
@@ -335,6 +355,10 @@ static inline bool visualization_settings() {
          << "F - Fullscreen:           " << fullScreen << endl
          << "W - Window width:         " << windowWidth << endl
          << "H - Window height:        " << windowHeight << endl
+         << "C - Cell size:            " << mesh.cell_size << endl
+         << "X - Origin x:             " << mesh.x0 << endl
+         << "Y - Origin y:             " << mesh.y0 << endl
+         << "Z - Origin z:             " << mesh.z0 << endl
          << "Options:" << endl
          << "h - Show graphics help." << endl
          << "g - Start patch visualiztion." << endl
@@ -369,6 +393,18 @@ static inline bool visualization_settings() {
     case 'm': {
       cout << "Mouse move sensity: ";
       cin >> sensitivity;
+    } break;
+    case 'C': {
+      cin >> mesh.cell_size;
+    } break;
+    case 'X': {
+      cin >> mesh.x0;
+    } break;
+    case 'Y': {
+      cin >> mesh.y0;
+    } break;
+    case 'Z': {
+      cin >> mesh.z0;
     } break;
     case 'h': {
       cout << R"(
@@ -433,8 +469,9 @@ static inline void bind_attributes(const tuple<vector<U>...> &vec,
 }
 
 template <typename Index, typename GetData, typename GetNearFar,
-          typename... Vertex>
+          typename GetDrawMode, typename... Vertex>
 static inline int visualize(GetData &&getData, GetNearFar &&getNearFar,
+                            GetDrawMode &&getDrawMode,
                             initializer_list<const char *> vertexShaderSource,
                             initializer_list<const char *> fragmentShaderSource,
                             type_list<Vertex...>) {
@@ -551,6 +588,8 @@ static inline int visualize(GetData &&getData, GetNearFar &&getNearFar,
 
   DETECT_ERROR;
 
+  auto mode = getDrawMode();
+
   // Render loop
   while (!glfwWindowShouldClose(window)) {
     // camera/view transformation
@@ -572,8 +611,7 @@ static inline int visualize(GetData &&getData, GetNearFar &&getNearFar,
 
     glUseProgram(shaderProgram);
     glBindVertexArray(VAO);
-    glDrawElements(wireframe ? GL_LINES : GL_TRIANGLES, (GLuint)indices.size(),
-                   gl_type_enum_v<Index>, 0);
+    glDrawElements(mode, (GLuint)indices.size(), gl_type_enum_v<Index>, 0);
     glBindVertexArray(0);
 
     glfwSwapBuffers(window);
@@ -606,12 +644,28 @@ out vec4 color;
   const char *index = R"(
 layout(location = 1) in float index;
 )";
+  const char *temperature = R"(
+layout(location = 1) in float index;
+)";
   const char *highlight = R"(
 uniform uint highlighted;
 )";
   const char *main_begin = R"(
 void main() {
  gl_Position = pv * vec4(aPos.x, aPos.y, aPos.z, 1.0);
+)";
+  const char *main_wave_length_to_rgb = R"(
+ float rr = 2800;
+ float rg = 2000;
+ float rb = 1200;
+ float ti = 2;
+ float wave_length = 2897772.1 / temperature;
+ color = vec4(
+  0.41 * pow(2, -pow(abs(wave_length - 595), ti) / rr),
+  0.82 * pow(2, -pow(abs(wave_length - 530), ti) / rg),
+  0.40 * pow(2, -pow(abs(wave_length - 460), ti) / rb),
+  .6f
+ );
 )";
   const char *main_highlight = R"(
  if (highlighted == index) {
@@ -638,6 +692,10 @@ void main() {
 }
 )";
 
+static inline GLenum defaultDrawMode() {
+  return wireframe ? GL_LINES : GL_TRIANGLES;
+}
+
 static inline int visualize_patch(const vector<patch_info> &patches) {
 
   patches_count = patches.size();
@@ -650,108 +708,7 @@ static inline int visualize_patch(const vector<patch_info> &patches) {
       return 0;
 
     visualize<GLuint>(
-        [&patches]() {
-          tuple<tuple<vector<GLuint>, vector<GLuint>>, vector<GLuint>> res;
-          auto &[vertices, indices] = res;
-          auto &[position, patchIndices] = vertices;
-
-          position.reserve(patches.size() * 12);
-          patchIndices.reserve(patches.size() * 4);
-          indices.reserve(wireframe ? indices.size() * 8 : indices.size() * 6);
-
-          GLuint i_patch = 0;
-          for (const auto &patch : patches) {
-            const GLuint N = (GLuint)position.size() / 3;
-            if (wireframe) {
-              switch (patch.IOR) {
-              case 1:
-              case -1:
-                indices.push_back(N + 0);
-                indices.push_back(N + 1);
-                indices.push_back(N + 1);
-                indices.push_back(N + 3);
-                indices.push_back(N + 3);
-                indices.push_back(N + 2);
-                indices.push_back(N + 2);
-                indices.push_back(N + 0);
-                break;
-              case 2:
-              case -2:
-                indices.push_back(N + 0);
-                indices.push_back(N + 2);
-                indices.push_back(N + 2);
-                indices.push_back(N + 1);
-                indices.push_back(N + 1);
-                indices.push_back(N + 3);
-                indices.push_back(N + 3);
-                indices.push_back(N + 0);
-                break;
-              case 3:
-              case -3:
-                indices.push_back(N + 0);
-                indices.push_back(N + 1);
-                indices.push_back(N + 1);
-                indices.push_back(N + 2);
-                indices.push_back(N + 2);
-                indices.push_back(N + 3);
-                indices.push_back(N + 3);
-                indices.push_back(N + 0);
-                break;
-              default:
-                break;
-              }
-            } else {
-              indices.push_back(N + 0);
-              indices.push_back(N + 1);
-              indices.push_back(N + 2);
-              switch (patch.IOR) {
-              case 1:
-              case -1:
-                indices.push_back(N + 1);
-                indices.push_back(N + 2);
-                indices.push_back(N + 3);
-                break;
-              case 2:
-              case -2:
-                indices.push_back(N + 0);
-                indices.push_back(N + 1);
-                indices.push_back(N + 3);
-                break;
-              case 3:
-              case -3:
-                indices.push_back(N + 0);
-                indices.push_back(N + 2);
-                indices.push_back(N + 3);
-                break;
-              default:
-                break;
-              }
-            }
-
-            position.push_back(patch.I1);
-            position.push_back(patch.J1);
-            position.push_back(patch.K1);
-
-            position.push_back(patch.I2);
-            position.push_back(patch.J1);
-            position.push_back(patch.K2);
-
-            position.push_back(patch.I2);
-            position.push_back(patch.J2);
-            position.push_back(patch.K1);
-
-            position.push_back(patch.I1);
-            position.push_back(patch.J2);
-            position.push_back(patch.K2);
-
-            for (size_t i = 0; i < 4; ++i)
-              patchIndices.push_back(i_patch);
-
-            ++i_patch;
-          }
-
-          return res;
-        },
+        [&patches]() { return from_patches<true>(patches, wireframe); },
         [&patches]() -> tuple<float, float> {
           constexpr auto u32_max = numeric_limits<u32>::max();
           u32 I1 = u32_max, I2 = 0, J1 = u32_max, J2 = 0, K1 = u32_max, K2 = 0;
@@ -774,6 +731,7 @@ static inline int visualize_patch(const vector<patch_info> &patches) {
 
           return {0.01f, far};
         },
+        defaultDrawMode,
         {vertexShaderSource.head_pos_pv_color, vertexShaderSource.index,
          vertexShaderSource.highlight, vertexShaderSource.main_begin,
          vertexShaderSource.main_highlight, vertexShaderSource.main_end},
@@ -788,121 +746,22 @@ static inline int visualize_data(const vector<float> &data, u32 m, u32 n) {
       return 0;
 
     visualize<GLuint>(
-        [&data, n]() {
-          tuple<tuple<vector<float>>, vector<GLuint>> res;
-          auto &[vertices, indices] = res;
-          auto &[position] = vertices;
-
-          position.reserve(data.size() * 3);
-          indices.reserve(wireframe ? indices.size() * 4 : indices.size() * 6);
-
-          u32 index = 0;
-          for (const auto &p : data) {
-            auto i = index / n, j = index % n;
-            if (j != 0)
-              if (wireframe) {
-                // 1
-                // 2
-                indices.push_back(i * n + j);
-                indices.push_back(i * n + j - 1);
-              }
-            if (i != 0) {
-              if (wireframe) {
-                // 2 1
-                indices.push_back(i * n + j);
-                indices.push_back((i - 1) * n + j);
-              } else {
-                //   2
-                // 3 1
-                indices.push_back(i * n + j);
-                indices.push_back(i * n + j + 1);
-                indices.push_back((i - 1) * n + j);
-                // 2 1
-                // 3
-                indices.push_back(i * n + j + 1);
-                indices.push_back((i - 1) * n + j + 1);
-                indices.push_back((i - 1) * n + j);
-              }
-            }
-
-            position.push_back((float)i);
-            position.push_back((float)j);
-            position.push_back((float)p);
-
-            ++index;
-          }
-
-          return res;
-        },
+        [&data, n]() { return from_matrix_data(data, n); },
         [&data, m, n]() -> tuple<float, float> {
           return {0.01f, 5 * max(initializer_list<float>{
                                  *max_element(data.cbegin(), data.cend()),
                                  (float)m, (float)n})};
         },
+        defaultDrawMode,
         {vertexShaderSource.head_pos_pv_color, vertexShaderSource.main_begin,
          vertexShaderSource.main_color, vertexShaderSource.main_end},
         {fragmentShaderSource}, type_list<float[3]>{});
   }
 }
 
-static inline const map<u32, vector<u32>> &get_element_frames() {
-  static map<u32, vector<u32>> element_frames;
-  if (element_frames.empty()) {
-    element_frames.emplace(8, vector<u32>{0, 1, 1, 2, 2, 3, 3, 0, 0, 4, 1, 5,
-                                          2, 6, 3, 7, 4, 5, 5, 6, 6, 7, 7, 4});
-    element_frames.emplace(
-        20,
-        vector<u32>{0, 8,  8,  1, 1, 9,  9,  2, 2, 10, 10, 3, 3, 11, 11, 0,
-                    0, 16, 16, 4, 1, 17, 17, 5, 2, 18, 18, 6, 3, 19, 19, 7,
-                    4, 12, 12, 5, 5, 13, 13, 6, 6, 14, 14, 7, 7, 15, 15, 4});
-    element_frames.emplace(10, vector<u32>{0, 4, 4, 1, 1, 5, 5, 2, 2, 6, 6, 0,
-                                           0, 7, 7, 3, 1, 8, 8, 3, 2, 9, 9, 3});
-  }
-  return element_frames;
-}
-
-static inline const map<u32, vector<u32>> &get_element_triangles() {
-  static map<u32, vector<u32>> element_frames;
-  if (element_frames.empty()) {
-    // 0 1 2 3
-    // 4 5 6 7
-    // 0 1 5 4
-    // 2 3 7 6
-    // 1 2 6 5
-    // 3 0 4 7
-    element_frames.emplace(8, vector<u32>{0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7,
-                                          0, 1, 5, 0, 5, 4, 2, 3, 7, 2, 7, 6,
-                                          1, 2, 6, 1, 6, 5, 3, 0, 4, 3, 4, 7});
-    //  0  8  1  9  2 10  3 11
-    //  4 12  5 13  6 14  7 15
-    //  0  8  1 17  5 12  4 16
-    //  1  9  2 18  6 13  5 17
-    //  2 10  3 19  7 14  6 18
-    //  3 11  0 16  4 15  7 19
-    initializer_list<u32> l20 = {
-        0, 8,  11, 8,  1, 9,  2, 10, 9,  10, 3, 11, 8,  9,  11, 9,  10, 11, //
-        4, 12, 15, 12, 5, 13, 6, 14, 13, 14, 7, 15, 12, 13, 15, 13, 14, 15, //
-        0, 8,  16, 8,  1, 17, 5, 12, 17, 12, 4, 16, 8,  17, 16, 17, 12, 16, //
-        1, 9,  17, 9,  2, 18, 6, 13, 18, 13, 5, 17, 9,  18, 17, 18, 13, 17, //
-        2, 10, 18, 10, 3, 19, 7, 14, 19, 14, 6, 18, 10, 19, 18, 19, 14, 18, //
-        3, 11, 19, 11, 0, 16, 4, 15, 16, 15, 7, 19, 11, 16, 19, 16, 15, 19  //
-    };
-    element_frames.emplace(20, vector<u32>{l20});
-    // 0 4 1 8 3 7
-    // 1 5 2 9 3 8
-    // 2 6 0 7 3 9
-    // 0 6 2 5 1 4
-    element_frames.emplace(10, vector<u32>{0, 4, 7, 4, 1, 8, 7, 8, 3, 4, 8, 7,
-                                           1, 5, 8, 5, 2, 9, 8, 9, 3, 5, 9, 8,
-                                           2, 6, 9, 6, 0, 7, 9, 7, 3, 6, 7, 9,
-                                           0, 6, 4, 6, 2, 5, 4, 5, 1, 6, 5, 4});
-  }
-  return element_frames;
-}
-
-static inline int visualize_3d_nodes(const vector<float> &nodes,
-                                     const vector<u32> &vertex_count,
-                                     const vector<u32> &elements) {
+static inline int visualize_3d_elements(const vector<float> &nodes,
+                                        const vector<u32> &vertex_count,
+                                        const vector<u32> &elements) {
 
   u32 sum = accumulate(vertex_count.cbegin(), vertex_count.cend(), 0);
   assert(elements.size() == sum);
@@ -916,86 +775,58 @@ static inline int visualize_3d_nodes(const vector<float> &nodes,
 
     visualize<GLuint>(
         [&nodes, &vertex_count, &elements, sum, ratio]() {
-          tuple<tuple<vector<float>>, vector<GLuint>> res;
-          auto &[vertices, indices] = res;
-          auto &[position] = vertices;
-          position = nodes;
-          for (auto &p : position)
-            p *= ratio;
-
-          indices.reserve(3 * sum);
-
-          u32 index = 0;
-
-          set<u32> unrecognized;
-
-          size_t out = 0;
-          if (wireframe) {
-            for (const auto &vc : vertex_count) {
-              auto &map = get_element_frames();
-              auto iter = map.find(vc);
-              if (iter != map.cend()) {
-                auto &[c, order] = *iter;
-                for (auto i : order) {
-                  assert(i < c);
-                  auto _i = elements.at(index + i);
-                  if (_i >= sum)
-                    ++out;
-                  indices.push_back(_i);
-                }
-              } else {
-                unrecognized.insert(vc);
-
-                for (auto p = elements.cbegin() + index;
-                     p < elements.cbegin() + index + vc - 1; ++p) {
-                  indices.push_back(*p);
-                  indices.push_back(*(p + 1));
-                }
-              }
-              index += vc;
-            }
-          } else {
-            for (const auto &vc : vertex_count) {
-              auto &map = get_element_triangles();
-              auto iter = map.find(vc);
-              if (iter != map.cend()) {
-                auto &[c, order] = *iter;
-                for (auto i : order) {
-                  assert(i < c);
-                  auto _i = elements.at(index + i);
-                  if (_i >= sum)
-                    ++out;
-                  indices.push_back(_i);
-                }
-              } else {
-                unrecognized.insert(vc);
-
-                for (auto p = elements.cbegin() + index;
-                     p < elements.cbegin() + index + vc - 2; ++p) {
-                  indices.push_back(*p);
-                  indices.push_back(*(p + 1));
-                  indices.push_back(*(p + 2));
-                }
-              }
-              index += vc;
-            }
-          }
-
-          if (!unrecognized.empty()) {
-            cout << "Element with ";
-            for (auto vc : unrecognized)
-              cout << vc << ' ';
-            cout << "nodes are not recoginzed." << endl;
-          }
-
-          if (out > 0)
-            clog << out << " indices out of nodes count detected." << endl;
-
-          return res;
+          return from_elements(nodes, vertex_count, elements, wireframe, sum,
+                               ratio);
         },
         [&nodes]() constexpr->tuple<float, float> {
           return {0.01f, 500.f};
         },
+        defaultDrawMode,
+        {vertexShaderSource.head_pos_pv_color, vertexShaderSource.main_begin,
+         vertexShaderSource.main_color, vertexShaderSource.main_end},
+        {fragmentShaderSource}, type_list<float[3]>{});
+  }
+}
+
+static inline int visualize_patches_and_elements(
+    const vector<float> &nodes, const vector<u32> &vertex_count,
+    const vector<u32> &elements, const vector<patch_info> &patches) {
+  u32 sum = accumulate(vertex_count.cbegin(), vertex_count.cend(), 0);
+  assert(elements.size() == sum);
+  while (true) {
+    if (!visualization_settings())
+      return 0;
+
+    visualize<GLuint>(
+        [&nodes, &vertex_count, &elements, &patches, sum]() {
+          return from_patches_and_elements(nodes, vertex_count, elements,
+                                           patches, wireframe, sum);
+        },
+        [&nodes]() constexpr->tuple<float, float> {
+          return {0.01f, 500.f};
+        },
+        defaultDrawMode,
+        {vertexShaderSource.head_pos_pv_color, vertexShaderSource.main_begin,
+         vertexShaderSource.main_color, vertexShaderSource.main_end},
+        {fragmentShaderSource}, type_list<float[3]>{});
+  }
+}
+
+static inline int visualize_nodes(const vector<float> &nodes,
+                                  const vector<u32> &indices) {
+  while (true) {
+    if (!visualization_settings())
+      return 0;
+
+    visualize<GLuint>(
+        [&nodes, &indices ]() -> auto{
+          glPointSize(10);
+          return make_tuple(make_tuple(nodes), indices);
+        },
+        [&nodes]() constexpr->tuple<float, float> {
+          return {0.01f, 500.f};
+        },
+        []() { return GL_POINTS; },
         {vertexShaderSource.head_pos_pv_color, vertexShaderSource.main_begin,
          vertexShaderSource.main_color, vertexShaderSource.main_end},
         {fragmentShaderSource}, type_list<float[3]>{});

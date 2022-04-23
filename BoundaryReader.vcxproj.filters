@@ -47,5 +47,14 @@
     <ClInclude Include="apdl_io.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="element_basic.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="fds_basic.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="shared.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

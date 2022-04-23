@@ -179,8 +179,6 @@ s - Select a file to read.
 r - Read file with specified name.
 c - Change current working directory.
 p - Change current directory to parent directory if there is one.
-a - Analyze data from other files.
-S - Execute a script.
 q - quit
 )";
   cout << help;
@@ -215,9 +213,6 @@ q - quit
         cout << "Failed to open." << endl;
       }
     } break;
-    case 'a': {
-      analyze<false>({}, {}, {});
-    } break;
     case 'c': {
       auto dir = request_file_by_name(
           [](const path &p) { return is_directory(p); }, "directory");
@@ -251,26 +246,6 @@ q - quit
   }
 }
 
-static inline void select_patch(const vector<patch_info> &patches,
-                                const vector<frame> &frames) {
-  u32 p = 0;
-  cout << "Select a patch to analyze. Input an invalid index to discard."
-       << endl;
-#if GRAPHICS_ENABLED
-  if (current < patches.size())
-    cout << "Current patch selected in graphics mode is: " << current << "."
-         << endl;
-#endif // GRAPHICS_ENABLED
-
-  cout << "Patch index: ";
-  cin >> p;
-  if (p >= patches.size()) {
-    return;
-  }
-
-  analyze<true>(patches, frames, p);
-}
-
 static inline tuple<array<char, 30 + 1>, array<char, 30 + 1>,
                     array<char, 30 + 1>, vector<patch_info>, vector<frame>>
 read_file_with_mode(istream &fin) {
@@ -294,7 +269,11 @@ d - Discard.
     cout << "Reading started." << endl;
     auto [label, bar_label, units, patches] = read_file_header_and_patches(fin);
     cout << "Reading finished." << endl;
-    return {std::move(label), std::move(bar_label), std::move(units), {}, {}};
+    return {std::move(label),
+            std::move(bar_label),
+            std::move(units),
+            std::move(patches),
+            {}};
   } break;
   case 'f': {
     cout << "Reading started." << endl;
@@ -303,44 +282,6 @@ d - Discard.
     return {std::move(label), std::move(bar_label), std::move(units),
             std::move(patches), std::move(frames)};
   } break;
-  default:
-    return {};
-  }
-}
-
-/// @brief Read nodes and elements information from user-selected files.
-/// @return Tuple that contains nodes coordinates, vertices counts, vertex
-/// indices.
-static inline tuple<vector<float>, vector<u32>, vector<u32>>
-read_nodes_and_elements() {
-  char opt = 'd';
-  cout << R"(
-s - Standard format.
-a - ANSYS mapdl file.
-)";
-  cin >> opt;
-  switch (opt) {
-  case 's': {
-    auto opt_nodes =
-        request_file_by_name([](const path &p) { return exists(p); }, "nodes");
-    auto opt_elems = request_file_by_name(
-        [](const path &p) { return exists(p); }, "elements");
-    if (!opt_nodes || !opt_elems)
-      return {};
-    auto in_nodes = ifstream(opt_nodes.value());
-    auto in_elems = ifstream(opt_elems.value());
-    auto nodes = read_nodes(in_nodes);
-    auto [elems, sizes] = read_elements(in_elems);
-    return {std::move(nodes), std::move(elems), std::move(sizes)};
-  }
-  case 'a': {
-    auto opt_apdl =
-        request_file_by_name([](const path &p) { return exists(p); }, "APDL");
-    if (!opt_apdl)
-      return {};
-    auto in = ifstream(opt_apdl.value());
-    return read_mapdl(in);
-  }
   default:
     return {};
   }
@@ -369,6 +310,8 @@ q - Quit.
 h - Show this help.
 r - Read file. Will override the file that was read before if there is one.
 n - Visualize some nodes.
+S - Execute a script.
+a - Analyze.
 u - Unload file.)";
     if (label.front() && bar_label.front() && units.front())
       R"(
@@ -381,6 +324,7 @@ F - Search for frame.)";
 
     if (!patches.empty())
       cout << R"(
+N - Visualize nodes and patches geometry.
 p - Show patches.
 P - Search for Patch.)"
 #if GRAPHICS_ENABLED
@@ -419,22 +363,29 @@ a - Analyze patch data.)";
       }
       data = read_file_with_mode(fin);
     } break;
+    case 'N':
+      if (!patches.empty()) {
+        auto [nodes, sizes, elems] = read_nodes_and_elements();
+        if (nodes.empty() || sizes.empty() || elems.empty()) {
+          cout << "Element data not valid." << endl;
+          break;
+        }
+        visualize_patches_and_elements(nodes, sizes, elems, patches);
+      }
+      goto CMDNF;
     case 'n': {
       auto [nodes, sizes, elems] = read_nodes_and_elements();
       if (nodes.empty() || sizes.empty() || elems.empty()) {
         cout << "Element data not valid." << endl;
         break;
       }
-      visualize_3d_nodes(nodes, sizes, elems);
+      visualize_3d_elements(nodes, sizes, elems);
     } break;
     case 'b': {
       print_header(cout, label, bar_label, units);
     } break;
     case 'a': {
-      if (!patches.empty() && !frames.empty())
-        select_patch(patches, frames);
-      else
-        goto CMDNF;
+      analyze(patches, frames);
     } break;
     case 'f': {
       if (!frames.empty())

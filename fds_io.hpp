@@ -1,5 +1,6 @@
 #pragma once
 
+#include "fds_basic.hpp"
 #include "io.hpp"
 
 static inline tuple<array<char, 30 + 1>, array<char, 30 + 1>,
