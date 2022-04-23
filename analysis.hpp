@@ -242,70 +242,6 @@ static inline vector<float> sample(const vector<float> &data,
   return new_result;
 }
 
-static inline set<u32> node_on_boundary(const vector<patch_info> &patches,
-                                        const vector<float> &nodes) {
-  assert(nodes.size() % 3 == 0);
-  assert(!nodes.empty());
-  assert(!patches.empty());
-  set<u32> res;
-
-  u32 i = 0;
-
-  float xmin = nodes[0], xmax = nodes[0], ymin = nodes[1], ymax = nodes[1],
-        zmin = nodes[2], zmax = nodes[2];
-  for (auto p = nodes.begin(), end = nodes.end(); p != end;) {
-    float x = *p++;
-    float y = *p++;
-    float z = *p++;
-    xmin = min(x, xmin);
-    xmax = max(x, xmax);
-    ymin = min(y, ymin);
-    ymax = max(y, ymax);
-    zmin = min(z, zmin);
-    zmax = max(z, zmax);
-  }
-  auto &f = patches.front();
-  u32 Imin = f.I1, Imax = f.I2, Jmin = f.J1, Jmax = f.J2, Kmin = f.K1,
-      Kmax = f.K2;
-  for (auto &p : patches) {
-    Imin = min(p.I1, Imin);
-    Imax = max(p.I2, Imax);
-    Jmin = min(p.J1, Jmin);
-    Jmax = max(p.J2, Jmax);
-    Kmin = min(p.K1, Kmin);
-    Kmax = max(p.K2, Kmax);
-  }
-
-  float Xmin = mesh.x0 + Imin * mesh.cell_size;
-  float Xmax = mesh.x0 + Imax * mesh.cell_size;
-  float Ymin = mesh.y0 + Jmin * mesh.cell_size;
-  float Ymax = mesh.y0 + Jmax * mesh.cell_size;
-  float Zmin = mesh.z0 + Kmin * mesh.cell_size;
-  float Zmax = mesh.z0 + Kmax * mesh.cell_size;
-  // cin >> cell_size >> x0 >> y0 >> z0;
-
-  for (auto p = nodes.begin(), end = nodes.end(); p != end;) {
-    float x = *p++;
-    float y = *p++;
-    float z = *p++;
-    for (const auto &patch : patches) {
-      float x1 = mesh.x0 + patch.I1 * mesh.cell_size - mesh.cell_size / 2;
-      float x2 = mesh.x0 + patch.I2 * mesh.cell_size + mesh.cell_size / 2;
-      float y1 = mesh.y0 + patch.J1 * mesh.cell_size - mesh.cell_size / 2;
-      float y2 = mesh.y0 + patch.J2 * mesh.cell_size + mesh.cell_size / 2;
-      float z1 = mesh.z0 + patch.K1 * mesh.cell_size - mesh.cell_size / 2;
-      float z2 = mesh.z0 + patch.K2 * mesh.cell_size + mesh.cell_size / 2;
-
-      if (x1 <= x && x <= x2 && y1 <= y && y <= y2 && z1 <= z && z <= z2) {
-        res.insert(i);
-        break;
-      }
-    }
-    ++i;
-  }
-  return res;
-}
-
 static size_t selected_patch = -1;
 
 static inline void select_patch(const vector<patch_info> &patches) {
@@ -414,34 +350,10 @@ d - Discard.
           cout << "Failed." << endl;
           break;
         }
-        auto element_indices = node_on_boundary(patches, nodes);
+        auto indices_of_node_on_boundary = node_on_boundary(patches, nodes);
 
-        if (0) {
-          vector<u32> _vertex_count;
-          vector<u32> _elements;
-
-          u32 i = 0;
-          for (auto size : sizes) {
-            for (auto p = elements.cbegin() + i;
-                 p < elements.cbegin() + i + size; ++p) {
-              if (element_indices.find(*p) != element_indices.cend()) {
-                for (auto p = elements.cbegin() + i;
-                     p < elements.cbegin() + i + size; ++p) {
-                  _elements.push_back(*p);
-                }
-                _vertex_count.push_back(size);
-                continue;
-              }
-            }
-            i += size;
-          }
-#if GRAPHICS_ENABLED
-          visualize_3d_elements(nodes, _vertex_count, _elements);
-#endif // GRAPHICS_ENABLED
-        } else {
-          visualize_nodes(nodes, vector<u32>(element_indices.cbegin(),
-                                             element_indices.cend()));
-        }
+        visualize_primitives_on_patch(nodes, sizes, elements,
+                                      indices_of_node_on_boundary);
       }
       break;
     case 'p': {

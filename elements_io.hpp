@@ -139,7 +139,7 @@ a - ANSYS mapdl file.
     auto in_nodes = ifstream(opt_nodes.value());
     auto nodes = read_standard_nodes(in_nodes);
     return std::move(nodes);
-  }
+  } break;
   case 'a': {
     auto opt_apdl =
         request_file_by_name([](const path &p) { return exists(p); }, "APDL");
@@ -148,7 +148,7 @@ a - ANSYS mapdl file.
     auto in = ifstream(opt_apdl.value());
     auto [nodes, _] = read_mapdl<true, false>(in);
     return std::move(nodes);
-  }
+  } break;
   default:
     return {};
   }

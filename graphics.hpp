@@ -671,7 +671,7 @@ void main() {
  if (highlighted == index) {
   color = vec4(.8f, .1f, .0f, .8f);
  } else {
-  color = vec4(.8f, .8f, .8f, .2f);
+  color = vec4(.8f, .8f, .8f, .1f);
  }
 )";
   const char *main_color = R"(
@@ -746,7 +746,7 @@ static inline int visualize_data(const vector<float> &data, u32 m, u32 n) {
       return 0;
 
     visualize<GLuint>(
-        [&data, n]() { return from_matrix_data(data, n); },
+        [&data, n]() { return from_matrix_data(data, n, wireframe); },
         [&data, m, n]() -> tuple<float, float> {
           return {0.01f, 5 * max(initializer_list<float>{
                                  *max_element(data.cbegin(), data.cend()),
@@ -827,6 +827,32 @@ static inline int visualize_nodes(const vector<float> &nodes,
           return {0.01f, 500.f};
         },
         []() { return GL_POINTS; },
+        {vertexShaderSource.head_pos_pv_color, vertexShaderSource.main_begin,
+         vertexShaderSource.main_color, vertexShaderSource.main_end},
+        {fragmentShaderSource}, type_list<float[3]>{});
+  }
+}
+
+static inline int visualize_primitives_on_patch(const vector<float> &nodes,
+                                                const vector<u32> &vertex_count,
+                                                const vector<u32> &elements,
+                                                set<u32> nodes_on_patch) {
+  u32 sum = accumulate(vertex_count.cbegin(), vertex_count.cend(), 0);
+  assert(elements.size() == sum);
+  while (true) {
+    if (!visualization_settings())
+      return 0;
+
+    visualize<GLuint>(
+        [&nodes, &nodes_on_patch, &vertex_count, &elements, sum ]() -> auto{
+          auto t = from_elements_if_in_set(nodes, vertex_count, elements,
+                                           wireframe, sum, nodes_on_patch);
+          return t;
+        },
+        [&nodes]() constexpr->tuple<float, float> {
+          return {0.01f, 500.f};
+        },
+        defaultDrawMode,
         {vertexShaderSource.head_pos_pv_color, vertexShaderSource.main_begin,
          vertexShaderSource.main_color, vertexShaderSource.main_end},
         {fragmentShaderSource}, type_list<float[3]>{});
