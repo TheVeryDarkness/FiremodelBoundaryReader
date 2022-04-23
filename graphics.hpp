@@ -646,7 +646,7 @@ out vec4 color;
 layout(location = 1) in float index;
 )";
   const char *temperature = R"(
-layout(location = 1) in float index;
+layout(location = 1) in float temperature;
 )";
   const char *highlight = R"(
 uniform uint highlighted;
@@ -660,7 +660,7 @@ void main() {
  float rg = 2000;
  float rb = 1200;
  float ti = 2;
- float wave_length = 2897772.1 / temperature;
+ float wave_length = 2897772.1 / (temperature + 273.15) / 15;
  color = vec4(
   0.41 * pow(2, -pow(abs(wave_length - 595), ti) / rr),
   0.82 * pow(2, -pow(abs(wave_length - 530), ti) / rg),
@@ -681,7 +681,18 @@ void main() {
   const char *main_end = R"(
 }
 )";
+
 } vertexShaderSource;
+
+const char *get_color(data_category category) {
+  switch (category) {
+  case data_category::temperature:
+    return vertexShaderSource.main_wave_length_to_rgb;
+  case data_category::other:
+  default:
+    return vertexShaderSource.main_color;
+  }
+}
 
 constexpr static inline auto &fragmentShaderSource = R"(
 #version 330 core
@@ -737,6 +748,27 @@ static inline int visualize_patch(const vector<patch_info> &patches) {
          vertexShaderSource.highlight, vertexShaderSource.main_begin,
          vertexShaderSource.main_highlight, vertexShaderSource.main_end},
         {fragmentShaderSource}, type_list<GLuint[3], GLuint>{});
+  }
+}
+static inline int visualize_frame(const vector<patch_info> &patches,
+                                  const frame &frame, data_category category) {
+  while (true) {
+    if (!visualization_settings())
+      return 0;
+
+    visualize<GLuint>(
+        [&patches, &frame ]() -> auto{
+          glPointSize(10);
+          return from_data(patches, frame);
+        },
+        [&patches]() constexpr->tuple<float, float> {
+          return {0.01f, 500.f};
+        },
+        []() { return GL_POINTS; },
+        {vertexShaderSource.head_pos_pv_color, vertexShaderSource.temperature,
+         vertexShaderSource.main_begin, get_color(category),
+         vertexShaderSource.main_end},
+        {fragmentShaderSource}, type_list<GLuint[3], float>{});
   }
 }
 

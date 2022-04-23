@@ -3,6 +3,7 @@
 #include <tuple>
 
 using std::conditional_t;
+using std::lexicographical_compare;
 using std::tuple;
 
 struct patch_info {
@@ -71,6 +72,24 @@ struct frame {
   float time;
   vector<patch_data> data;
 };
+
+enum class data_category { temperature, other };
+
+template <size_t len>
+constexpr static inline bool compare(const array<char, 30 + 1> &a,
+                                     const char (&b)[len]) {
+  static_assert(len < 30);
+  return lexicographical_compare(a.data(), a.data() + len + 1, b,
+                                 b + len + 1) == 0;
+}
+
+constexpr static inline data_category
+get_data_category(const array<char, 30 + 1> &units) {
+  if (compare(units, "C")) {
+    return data_category::temperature;
+  } else
+    return data_category::other;
+}
 
 static struct {
   float cell_size = 1;
@@ -187,6 +206,43 @@ from_patches(const vector<patch_info> &patches, bool wireframe) {
 
     ++i_patch;
   }
+
+  return res;
+}
+
+static inline tuple<tuple<vector<u32>, vector<float>>, vector<u32>>
+from_data(const vector<patch_info> &patches, const frame &frame) {
+  tuple<tuple<vector<u32>, vector<float>>, vector<u32>> res;
+  auto &[vertices, indices] = res;
+  auto &[position, _data] = vertices;
+
+  u32 points = 0;
+  for (auto &p : patches) {
+    points += p.size();
+  }
+
+  _data.reserve(points);
+  position.reserve(points * 3);
+  indices.reserve(points);
+
+  for (auto &p : frame.data)
+    _data.insert(_data.cend(), p.data.cbegin(), p.data.cend());
+
+  for (const auto &patch : patches) {
+    for (auto k = patch.K1; k <= patch.K2; ++k) {
+      for (auto j = patch.J1; j <= patch.J2; ++j) {
+        for (auto i = patch.I1; i <= patch.I2; ++i) {
+          position.push_back(i);
+          position.push_back(j);
+          position.push_back(k);
+          indices.push_back(indices.size());
+        }
+      }
+    }
+  }
+  assert(_data.size() == points);
+  assert(position.size() == points * 3);
+  assert(indices.size() == points);
 
   return res;
 }

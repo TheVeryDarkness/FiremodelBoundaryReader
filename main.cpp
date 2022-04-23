@@ -320,7 +320,12 @@ b - Show boundary quantity basic information.)";
     if (!frames.empty())
       cout << R"(
 f - Show frames.
-F - Search for frame.)";
+F - Search for frame.)"
+#if GRAPHICS_ENABLED
+              R"(
+V - Visualize frame.)"
+#endif // GRAPHICS_ENABLED
+          ;
 
     if (!patches.empty())
       cout << R"(
@@ -398,6 +403,14 @@ a - Analyze patch data.)";
       if (!patches.empty())
         visualize_patch(patches);
       else
+        goto CMDNF;
+    } break;
+#endif // GRAPHICS_ENABLED
+#if GRAPHICS_ENABLED
+    case 'V': {
+      if (!frames.empty()) {
+        visualize_frame(patches, frames.back(), get_data_category(units));
+      } else
         goto CMDNF;
     } break;
 #endif // GRAPHICS_ENABLED
