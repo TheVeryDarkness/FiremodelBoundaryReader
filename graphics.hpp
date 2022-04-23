@@ -105,7 +105,7 @@ static inline void onKey(GLFWwindow *window, const int key, int scancode,
                                       : GLFW_CURSOR_DISABLED);
     }
 
-  if (action == GLFW_REPEAT) {
+  if (action == GLFW_REPEAT || action == GLFW_PRESS) {
     if (key == GLFW_KEY_LEFT) {
       cameraPos += glm::cross(cameraUp, cameraFront) * key_move_sensity;
     }
@@ -122,7 +122,7 @@ static inline void onKey(GLFWwindow *window, const int key, int scancode,
 
   const bool continuous = mods & GLFW_MOD_CAPS_LOCK;
 
-  if (key == GLFW_KEY_LEFT)
+  if (key == GLFW_KEY_LEFT_BRACKET)
     if (action == GLFW_PRESS || (continuous && action == GLFW_REPEAT)) {
       if (current > 0)
         --current;
@@ -130,7 +130,7 @@ static inline void onKey(GLFWwindow *window, const int key, int scancode,
         current = patches_count ? patches_count - 1 : 0;
     }
 
-  if (key == GLFW_KEY_RIGHT)
+  if (key == GLFW_KEY_RIGHT_BRACKET)
     if (action == GLFW_PRESS || (continuous && action == GLFW_REPEAT)) {
       if (current < patches_count) {
         ++current;
