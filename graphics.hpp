@@ -410,9 +410,10 @@ static inline bool visualization_settings() {
       cout << R"(
 Press TAB to enable or disable cursor.
 Press CAPS to enable or disable continuous key input.
-Press LEFT or RIGHT to change current highlighted patch.
+Press [ or ] to change current highlighted patch.
 Press ESC to terminate.
 Move mouse to rotate the camera when cursor is disabled.
+Direction key to move.
 Scroll to move forward or backward when cursor is disabled.
 Scroll to modify the scroll sensity when cursor is enabled.
 )";
