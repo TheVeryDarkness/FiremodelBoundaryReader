@@ -59,10 +59,110 @@ static inline const map<u32, vector<u32>> &get_element_triangles() {
   return element_frames;
 }
 
+static inline const map<u32, tuple<u32, vector<u32>>> &get_element_polygons() {
+  static map<u32, tuple<u32, vector<u32>>> element_polygons;
+
+  if (element_polygons.empty()) {
+    // 0 1 2 3
+    // 4 5 6 7
+    // 0 1 5 4
+    // 2 3 7 6
+    // 1 2 6 5
+    // 3 0 4 7
+    initializer_list<u32> l8 = {0, 1, 2, 3, //
+                                4, 5, 6, 7, //
+                                0, 1, 5, 4, //
+                                2, 3, 7, 6, //
+                                1, 2, 6, 5};
+    element_polygons.emplace(8, make_tuple(4, vector<u32>{l8}));
+    //  0  8  1  9  2 10  3 11
+    //  4 12  5 13  6 14  7 15
+    //  0  8  1 17  5 12  4 16
+    //  1  9  2 18  6 13  5 17
+    //  2 10  3 19  7 14  6 18
+    //  3 11  0 16  4 15  7 19
+    initializer_list<u32> l20 = {0, 8,  1, 9,  2, 10, 3, 11, //
+                                 4, 12, 5, 13, 6, 14, 7, 15, //
+                                 0, 8,  1, 17, 5, 12, 4, 16, //
+                                 1, 9,  2, 18, 6, 13, 5, 17, //
+                                 2, 10, 3, 19, 7, 14, 6, 18, //
+                                 3, 11, 0, 16, 4, 15, 7, 19};
+    element_polygons.emplace(20, make_tuple(8, vector<u32>{l20}));
+    // 0 4 1 8 3 7
+    // 1 5 2 9 3 8
+    // 2 6 0 7 3 9
+    // 0 6 2 5 1 4
+    initializer_list<u32> l10 = {0, 4, 1, 8, 3, 7, //
+                                 1, 5, 2, 9, 3, 8, //
+                                 2, 6, 0, 7, 3, 9, //
+                                 0, 6, 2, 5, 1, 4};
+    element_polygons.emplace(10, make_tuple(6, vector<u32>{l10}));
+  }
+  return element_polygons;
+}
+
+static inline tuple<vector<u32>, vector<u32>>
+get_polygon(const vector<u32> &sizes, const vector<u32> &indices) {
+  auto count = accumulate(sizes.begin(), sizes.end(), 0);
+  assert(count == indices.size());
+  tuple<vector<u32>, vector<u32>> res;
+  auto &[polygon_sizes, polygon_indices] = res;
+  auto p = indices.begin();
+  auto end = indices.end();
+  auto &map = get_element_polygons();
+  for (auto sz : sizes) {
+    assert(p < end);
+    auto &[polygon_size, polygon_vertex_indices] = map.at(sz);
+    for (size_t i = 0; i < polygon_vertex_indices.size() / polygon_size; ++i)
+      polygon_sizes.push_back(polygon_size);
+    for (auto polygon_vertex_index : polygon_vertex_indices)
+      polygon_indices.push_back(*(p + polygon_vertex_index));
+    p += sz;
+  }
+  return res;
+}
+
+static inline vector<u32> from_polygons(const vector<u32> &polygon_sizes,
+                                        const vector<u32> &polygon_indices,
+                                        const bool wireframe) {
+  auto sum = accumulate(polygon_sizes.begin(), polygon_sizes.end(), 0);
+  assert(sum == polygon_indices.size());
+  auto p = polygon_indices.begin();
+  auto e = polygon_indices.end();
+  vector<u32> res;
+
+  for (auto size : polygon_sizes) {
+    assert(p != e);
+
+    if (wireframe) {
+      for (size_t i = 1; i < size; ++i) {
+        res.push_back(*(p + i));
+        res.push_back(*(p + i - 1));
+      }
+      res.push_back(*p);
+      res.push_back(*(p + size - 1));
+    } else {
+      for (size_t i = 2; i < size; ++i) {
+        res.push_back(*(p + i));
+        res.push_back(*(p + i - 1));
+        res.push_back(*(p + i - 2));
+      }
+      res.push_back(*p);
+      res.push_back(*(p + size - 1));
+      res.push_back(*(p + size - 2));
+      res.push_back(*(p + 1));
+      res.push_back(*p);
+      res.push_back(*(p + size - 1));
+    }
+    p += size;
+  }
+  return res;
+}
+
 static inline tuple<tuple<vector<float>>, vector<GLuint>>
 from_elements(const vector<float> &nodes, const vector<u32> &vertex_count,
-              const vector<u32> &elements, bool wireframe, u32 sum,
-              float ratio = 1) {
+              const vector<u32> &elements, const bool wireframe, const u32 sum,
+              const float ratio) {
   tuple<tuple<vector<float>>, vector<GLuint>> res;
   auto &[vertices, indices] = res;
   auto &[position] = vertices;
@@ -155,8 +255,9 @@ static inline bool set_contains_all(const set<Ty> &s, initializer_list<Ty> l) {
 static inline tuple<tuple<vector<float>>, vector<GLuint>>
 from_elements_if_in_set(const vector<float> &nodes,
                         const vector<u32> &vertex_count,
-                        const vector<u32> &elements, bool wireframe, u32 sum,
-                        const set<u32> &nodes_set, float ratio = 1) {
+                        const vector<u32> &elements, const bool wireframe,
+                        const u32 sum, const set<u32> &nodes_set,
+                        const float ratio) {
   tuple<tuple<vector<float>>, vector<GLuint>> res;
   auto &[vertices, indices] = res;
   auto &[position] = vertices;

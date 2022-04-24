@@ -286,7 +286,9 @@ C - Save current result as CSV file.)";
     if (!patches.empty())
       cout << R"(
 s - Select a patch.
-n - Find nodes on boundary.)";
+Y - Visualize polygons on boundary.
+N - Visualize nodes on boundary.
+V - Visualize elements primitives on boundary.)";
 
     if (!frames.empty())
       cout <<
@@ -343,7 +345,35 @@ d - Discard.
       for (; begin != end; ++begin)
         cout << '*' << *begin;
     } break;
-    case 'n':
+    case 'Y':
+      if (!patches.empty()) {
+        const auto [nodes, sizes, elements] = read_nodes_and_elements();
+        if (nodes.empty() || sizes.empty() || elements.empty()) {
+          cout << "Failed." << endl;
+          break;
+        }
+        auto [polygon_sizes, polygon_indices] = get_polygon(sizes, elements);
+        auto indices_of_polygon_vertices_on_boundary = polygon_on_boundary(
+            patches, nodes, polygon_sizes, polygon_indices, wireframe);
+
+        visualize_polygons(nodes, polygon_sizes,
+                           indices_of_polygon_vertices_on_boundary);
+      }
+      break;
+    case 'N':
+      if (!patches.empty()) {
+        const auto [nodes, sizes, elements] = read_nodes_and_elements();
+        if (nodes.empty() || sizes.empty() || elements.empty()) {
+          cout << "Failed." << endl;
+          break;
+        }
+        auto indices_of_node_on_boundary = node_on_boundary(patches, nodes);
+
+        visualize_nodes(nodes, vector<u32>(indices_of_node_on_boundary.begin(),
+                                           indices_of_node_on_boundary.end()));
+      }
+      break;
+    case 'V':
       if (!patches.empty()) {
         const auto [nodes, sizes, elements] = read_nodes_and_elements();
         if (nodes.empty() || sizes.empty() || elements.empty()) {

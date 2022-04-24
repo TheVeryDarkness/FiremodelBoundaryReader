@@ -4,11 +4,11 @@
 
 using std::exception;
 using std::vector;
-class file_error : std::exception {
+class file_error : public std::exception {
 public:
   const char *what() const noexcept { return "File is not correct. Check it."; }
 };
-class stream_error : std::exception {
+class stream_error : public std::exception {
 public:
   const char *what() const noexcept {
     return "File stream terminated unexpectedly. This is usually because of an "

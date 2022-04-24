@@ -1,7 +1,10 @@
 #pragma once
 #include "types.hpp"
+#include <array>
+#include <cassert>
 #include <tuple>
 
+using std::array;
 using std::conditional_t;
 using std::lexicographical_compare;
 using std::tuple;

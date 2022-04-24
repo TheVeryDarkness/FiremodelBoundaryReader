@@ -89,7 +89,7 @@ static inline bool cursor_enabled = false;
 static inline bool patch_loop = false;
 static inline size_t current = 0;
 static inline size_t patches_count = 0;
-static inline float key_move_sensity = 0.1f;
+static inline float key_move_sensity = 0.5f;
 
 static inline void onKey(GLFWwindow *window, const int key, int scancode,
                          int action, const int mods) {
@@ -142,7 +142,7 @@ static inline void onKey(GLFWwindow *window, const int key, int scancode,
   glfwSetWindowTitle(window, title.c_str());
 }
 
-static inline GLfloat sensitivity = 0.01f;
+static inline GLfloat sensitivity = 0.04f;
 static inline void onMouseMove(GLFWwindow *window, double xposIn,
                                double yposIn) {
 
@@ -350,6 +350,7 @@ static inline bool visualization_settings() {
     cout << "Settings:" << endl
          << "f - Display as wireframe: " << wireframe << endl
          << "c - Current patch:        " << current << endl
+         << "m - Key move sensity:     " << key_move_sensity << endl
          << "m - Mouse move sensity:   " << rate << endl
          << "s - Scroll sensity:       " << sensitivity << endl
          << "F - Fullscreen:           " << fullScreen << endl
@@ -393,6 +394,10 @@ static inline bool visualization_settings() {
     case 'm': {
       cout << "Mouse move sensity: ";
       cin >> sensitivity;
+    } break;
+    case 'k': {
+      cout << "Key move sensity: ";
+      cin >> key_move_sensity;
     } break;
     case 'C': {
       cin >> mesh.cell_size;
@@ -672,13 +677,14 @@ void main() {
  if (highlighted == index) {
   color = vec4(.8f, .1f, .0f, .8f);
  } else {
-  color = vec4(.8f, .8f, .8f, .1f);
+  color = vec4(.6f, .6f, .6f, .1f);
  }
 )";
   const char *main_color = R"(
   color = vec4(.6f, .6f, .6f, .1f);
 )";
   const char *main_end = R"(
+  color.a = color.a * exp(-gl_Position.z / 30);
 }
 )";
 
@@ -795,7 +801,6 @@ static inline int visualize_data(const vector<float> &data, u32 m, u32 n) {
 static inline int visualize_3d_elements(const vector<float> &nodes,
                                         const vector<u32> &vertex_count,
                                         const vector<u32> &elements) {
-
   u32 sum = accumulate(vertex_count.cbegin(), vertex_count.cend(), 0);
   assert(elements.size() == sum);
   float _max =
@@ -826,14 +831,18 @@ static inline int visualize_patches_and_elements(
     const vector<u32> &elements, const vector<patch_info> &patches) {
   u32 sum = accumulate(vertex_count.cbegin(), vertex_count.cend(), 0);
   assert(elements.size() == sum);
+  float _max =
+      max(initializer_list<float>{*max_element(nodes.cbegin(), nodes.cend())});
+  float ratio = _max == 0 ? 1 : 100 / _max;
+
   while (true) {
     if (!visualization_settings())
       return 0;
 
     visualize<GLuint>(
-        [&nodes, &vertex_count, &elements, &patches, sum]() {
+        [&nodes, &vertex_count, &elements, &patches, sum, ratio]() {
           return from_patches_and_elements(nodes, vertex_count, elements,
-                                           patches, wireframe, sum);
+                                           patches, wireframe, sum, ratio);
         },
         [&nodes]() constexpr->tuple<float, float> {
           return {0.01f, 500.f};
@@ -847,19 +856,53 @@ static inline int visualize_patches_and_elements(
 
 static inline int visualize_nodes(const vector<float> &nodes,
                                   const vector<u32> &indices) {
+  float _max =
+      max(initializer_list<float>{*max_element(nodes.cbegin(), nodes.cend())});
+  float ratio = _max == 0 ? 1 : 100 / _max;
+
   while (true) {
     if (!visualization_settings())
       return 0;
 
     visualize<GLuint>(
-        [&nodes, &indices ]() -> auto{
-          glPointSize(10);
-          return make_tuple(make_tuple(nodes), indices);
+        [&nodes, &indices, ratio ]() -> auto{
+          glPointSize(20);
+          auto _nodes = nodes;
+          for (auto &n : _nodes)
+            n *= ratio;
+          return make_tuple(make_tuple(_nodes), indices);
         },
         [&nodes]() constexpr->tuple<float, float> {
           return {0.01f, 500.f};
         },
         []() { return GL_POINTS; },
+        {vertexShaderSource.head_pos_pv_color, vertexShaderSource.main_begin,
+         vertexShaderSource.main_color, vertexShaderSource.main_end},
+        {fragmentShaderSource}, type_list<float[3]>{});
+  }
+}
+
+static inline int visualize_polygons(const vector<float> &nodes,
+                                     const vector<u32> &polygon_sizes,
+                                     const vector<u32> &polygon_indices) {
+  float _max =
+      max(initializer_list<float>{*max_element(nodes.cbegin(), nodes.cend())});
+  float ratio = _max == 0 ? 1 : 100 / _max;
+
+  while (true) {
+    if (!visualization_settings())
+      return 0;
+
+    visualize<GLuint>(
+        [&nodes, &polygon_sizes, &polygon_indices, ratio ]() -> auto{
+          return make_tuple(
+              make_tuple(nodes),
+              from_polygons(polygon_sizes, polygon_indices, wireframe));
+        },
+        [&nodes]() constexpr->tuple<float, float> {
+          return {0.01f, 500.f};
+        },
+        defaultDrawMode,
         {vertexShaderSource.head_pos_pv_color, vertexShaderSource.main_begin,
          vertexShaderSource.main_color, vertexShaderSource.main_end},
         {fragmentShaderSource}, type_list<float[3]>{});
@@ -872,14 +915,20 @@ static inline int visualize_primitives_on_patch(const vector<float> &nodes,
                                                 set<u32> nodes_on_patch) {
   u32 sum = accumulate(vertex_count.cbegin(), vertex_count.cend(), 0);
   assert(elements.size() == sum);
+  float _max =
+      max(initializer_list<float>{*max_element(nodes.cbegin(), nodes.cend())});
+  float ratio = _max == 0 ? 1 : 100 / _max;
+
   while (true) {
     if (!visualization_settings())
       return 0;
 
     visualize<GLuint>(
-        [&nodes, &nodes_on_patch, &vertex_count, &elements, sum ]() -> auto{
-          auto t = from_elements_if_in_set(nodes, vertex_count, elements,
-                                           wireframe, sum, nodes_on_patch);
+        [&nodes, &nodes_on_patch, &vertex_count, &elements, sum,
+         ratio ]() -> auto{
+          auto t =
+              from_elements_if_in_set(nodes, vertex_count, elements, wireframe,
+                                      sum, nodes_on_patch, ratio);
           return t;
         },
         [&nodes]() constexpr->tuple<float, float> {

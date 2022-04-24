@@ -93,14 +93,16 @@ static inline void write_standard_elements(ostream &out,
                                            const vector<u32> &size,
                                            const vector<u32> &indices) {
   map<u32, vector<u32>> m;
-  size_t i = 0;
-  for (auto sz : size) {
-    if (m.find(sz) == m.cend()) {
-      m.emplace(sz, vector<u32>{});
+  {
+    size_t i = 0;
+    for (auto sz : size) {
+      if (m.find(sz) == m.cend()) {
+        m.emplace(sz, vector<u32>{});
+      }
+      for (auto p = indices.cbegin() + i; p != indices.cbegin() + i + sz; ++p)
+        m.at(sz).push_back(*p);
+      i += sz;
     }
-    for (auto p = indices.cbegin() + i; p != indices.cbegin() + i + sz; ++p)
-      m.at(sz).push_back(*p);
-    i += sz;
   }
 
   for (auto &[sz, vec] : m) {
@@ -159,13 +161,13 @@ a - ANSYS mapdl file.
 /// indices.
 static inline tuple<vector<float>, vector<u32>, vector<u32>>
 read_nodes_and_elements() {
-  char opt = 'd';
+  char opt0 = 'd';
   cout << R"(
 s - Standard format.
 a - ANSYS mapdl file.
 )";
-  cin >> opt;
-  switch (opt) {
+  cin >> opt0;
+  switch (opt0) {
   case 's': {
     auto opt_nodes =
         request_file_by_name([](const path &p) { return exists(p); }, "nodes");

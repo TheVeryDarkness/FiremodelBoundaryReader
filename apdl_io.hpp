@@ -1,5 +1,6 @@
 #pragma once
 
+#include "fds_basic.hpp"
 #include "io.hpp"
 #include <cassert>
 #include <string>
@@ -144,4 +145,18 @@ read_mapdl(istream &in) {
     if (elements.empty())
       cerr << "Elements definition not found" << endl;
   return res;
+}
+
+static inline void write_table(ostream &o, const char *name, u32 index,
+                               const vector<frame> &frames,
+                               const vector<float> &vec) {
+  o << "*DIM," << name << index << ",TABLE," << frames.size() << ",1,1,TIME,"
+    << name;
+
+  size_t i = 0;
+  for (const frame &frame : frames) {
+    o << "*SET," << name << index << "(" << i + 1 << ",0)," << frame.time;
+    o << "*SET," << name << index << "(" << i + 1 << ",1)," << vec[i];
+    ++i;
+  }
 }
