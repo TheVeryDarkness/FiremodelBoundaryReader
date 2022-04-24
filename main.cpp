@@ -300,8 +300,17 @@ static inline void process_file() {
       data;
   auto &[label, bar_label, units, patches, frames] = data;
 
+  tuple<vector<float>, vector<u32>, vector<u32>> elements_data;
+  auto &[nodes, sizes, elems] = elements_data;
+
+  auto elem_available = [&]() {
+    auto &[nodes, sizes, elems] = elements_data;
+    return !nodes.empty() && !sizes.empty() && !elems.empty();
+  };
+
   auto help = [&]() {
     auto &[label, bar_label, units, patches, frames] = data;
+    auto &[nodes, sizes, elems] = elements_data;
 
     cout <<
         R"(
@@ -309,7 +318,7 @@ Commands:
 q - Quit.
 h - Show this help.
 r - Read file. Will override the file that was read before if there is one.
-n - Visualize some nodes.
+e - Read elements.
 S - Execute a script.
 a - Analyze.
 u - Unload file.)";
@@ -327,9 +336,12 @@ V - Visualize frame.)"
 #endif // GRAPHICS_ENABLED
           ;
 
+    if (elem_available())
+      cout << R"(
+n - Visualize nodes.)";
+
     if (!patches.empty())
       cout << R"(
-N - Visualize nodes and patches geometry.
 p - Show patches.
 P - Search for Patch.)"
 #if GRAPHICS_ENABLED
@@ -337,6 +349,10 @@ P - Search for Patch.)"
 v - Visualize patches geometry.)"
 #endif // GRAPHICS_ENABLED
           ;
+
+    if (!patches.empty() && elem_available())
+      cout << R"(
+N - Visualize nodes and patches geometry.)";
 
     if (!patches.empty() && !frames.empty())
       cout << R"(
@@ -357,6 +373,12 @@ a - Analyze patch data.)";
       patches.clear();
       frames.clear();
     } break;
+    case 'e': {
+      elements_data = read_nodes_and_elements();
+      if (!elem_available()) {
+        cout << "Element data not valid." << endl;
+      }
+    }; break;
     case 'r': {
       auto in = select_file();
       if (!in.has_value())
@@ -369,28 +391,21 @@ a - Analyze patch data.)";
       data = read_file_with_mode(fin);
     } break;
     case 'N':
-      if (!patches.empty()) {
-        auto [nodes, sizes, elems] = read_nodes_and_elements();
-        if (nodes.empty() || sizes.empty() || elems.empty()) {
-          cout << "Element data not valid." << endl;
-          break;
-        }
+      if (!patches.empty() && elem_available()) {
         visualize_patches_and_elements(nodes, sizes, elems, patches);
-      }
-      goto CMDNF;
-    case 'n': {
-      auto [nodes, sizes, elems] = read_nodes_and_elements();
-      if (nodes.empty() || sizes.empty() || elems.empty()) {
-        cout << "Element data not valid." << endl;
-        break;
-      }
-      visualize_3d_elements(nodes, sizes, elems);
-    } break;
+      } else
+        goto CMDNF;
+    case 'n':
+      if (elem_available()) {
+        visualize_3d_elements(nodes, sizes, elems);
+      } else
+        goto CMDNF;
+      break;
     case 'b': {
       print_header(cout, label, bar_label, units);
     } break;
     case 'a': {
-      analyze(patches, frames);
+      analyze(patches, frames, nodes, sizes, elems);
     } break;
     case 'f': {
       if (!frames.empty())
@@ -432,6 +447,19 @@ a - Analyze patch data.)";
       else
         goto CMDNF;
     } break;
+    case 'S': {
+      auto opt = request_file_by_name([](const path &p) { return exists(p); },
+                                      "script");
+      if (!opt)
+        break;
+      ifstream in(opt.value());
+      string line;
+      while (in.peek() != char_traits<char>::eof() && in) {
+        getline(in, line);
+        cin << line;
+        cin.endl();
+      }
+    }; break;
     case 'h':
       help();
       break;

@@ -262,9 +262,17 @@ static inline void select_patch(const vector<patch_info> &patches) {
 }
 
 static inline void analyze(const vector<patch_info> &patches,
-                           const vector<frame> &frames) {
+                           const vector<frame> &frames,
+                           const vector<float> &nodes,
+                           const vector<u32> &element_sizes,
+                           const vector<u32> &element_indices) {
   vector<float> data;
   vector<u32> sizes;
+
+  auto elem_avail = [&]() {
+    return !nodes.empty() && !element_sizes.empty() && !element_indices.empty();
+  };
+
   while (true) {
     cout << R"(
 Commands:
@@ -285,10 +293,17 @@ C - Save current result as CSV file.)";
 
     if (!patches.empty())
       cout << R"(
-s - Select a patch.
+s - Select a patch.)";
+
+    if (!patches.empty() && elem_avail())
+      cout << R"(
 Y - Visualize polygons on boundary.
 N - Visualize nodes on boundary.
 R - Visualize elements primitives on boundary.)";
+
+    if (!patches.empty() && !frames.empty() && elem_avail())
+      cout << R"(
+l - Write APDL output.)";
 
     if (!frames.empty())
       cout <<
@@ -346,29 +361,19 @@ d - Discard.
         cout << '*' << *begin;
     } break;
     case 'Y':
-      if (!patches.empty()) {
-        const auto [nodes, sizes, elements] = read_nodes_and_elements();
-        if (nodes.empty() || sizes.empty() || elements.empty()) {
-          cout << "Failed." << endl;
-          break;
-        }
-        auto [polygon_sizes, polygon_indices] = get_polygon(sizes, elements);
+      if (!patches.empty() && elem_avail()) {
+        auto [polygon_sizes, polygon_indices] =
+            get_polygon(element_sizes, element_indices);
         auto [sizes_of_polygon_vertices_on_boundary,
               indices_of_polygon_vertices_on_boundary] =
-            polygon_on_boundary(patches, nodes, polygon_sizes, polygon_indices,
-                                wireframe);
+            polygon_on_boundary(patches, nodes, polygon_sizes, polygon_indices);
 
         visualize_polygons(nodes, sizes_of_polygon_vertices_on_boundary,
                            indices_of_polygon_vertices_on_boundary);
       }
       break;
     case 'N':
-      if (!patches.empty()) {
-        const auto [nodes, sizes, elements] = read_nodes_and_elements();
-        if (nodes.empty() || sizes.empty() || elements.empty()) {
-          cout << "Failed." << endl;
-          break;
-        }
+      if (!patches.empty() && elem_avail()) {
         auto indices_of_node_on_boundary = node_on_boundary(patches, nodes);
 
         visualize_nodes(nodes, vector<u32>(indices_of_node_on_boundary.begin(),
@@ -376,16 +381,9 @@ d - Discard.
       }
       break;
     case 'R':
-      if (!patches.empty()) {
-        const auto [nodes, sizes, elements] = read_nodes_and_elements();
-        if (nodes.empty() || sizes.empty() || elements.empty()) {
-          cout << "Failed." << endl;
-          break;
-        }
-        auto indices_of_node_on_boundary = node_on_boundary(patches, nodes);
-
-        visualize_primitives_on_patch(nodes, sizes, elements,
-                                      indices_of_node_on_boundary);
+      if (!patches.empty() && elem_avail()) {
+        visualize_primitives_on_patch(patches, nodes, element_sizes,
+                                      element_indices);
       }
       break;
     case 'p': {
@@ -400,12 +398,39 @@ d - Discard.
       u16 precision = input_precision();
       set_default_precision(precision);
     } break;
-    case 'l':
-      reduce_dimension(sizes, 1);
-      if (sizes.size() > 1)
-        cout << "Linearization failed. Current dimension is " << sizes.size()
-             << "." << endl;
-      break;
+    case 'l': {
+      auto opt = request_file_by_name([](const path &p) { return true; },
+                                      "APDL writable");
+      auto out = ofstream(opt.value());
+      if (!out) {
+        cout << "Open Failed." << endl;
+      }
+      out << "/PREP7" << endl;
+
+      auto [polygon_sizes, polygon_indices] =
+          get_polygon(element_sizes, element_indices);
+
+      auto [on_boundary_polygon_sizes, on_boundary_polygon_indices,
+            boundary_data] = polygon_average(patches, nodes, polygon_sizes,
+                                             polygon_indices, frames);
+
+      const auto N = frames.size();
+      assert(boundary_data.size() == on_boundary_polygon_sizes.size() * N);
+      size_t i = 0;
+      auto p = on_boundary_polygon_indices.begin();
+      auto e = on_boundary_polygon_indices.end();
+      auto P = boundary_data.begin();
+      auto E = boundary_data.end();
+      for (auto sz : on_boundary_polygon_sizes) {
+        assert(p < e);
+        assert(P < E);
+        write_table(out, "HFLUX", i, vector<u32>(p, p + sz), frames,
+                    vector<float>(P, P + N));
+        ++i;
+        p += sz;
+        P += N;
+      }
+    } break;
     case 'S': {
       size_t dimension = -1;
       cin >> dimension;

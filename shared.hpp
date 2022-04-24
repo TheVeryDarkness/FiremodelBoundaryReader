@@ -5,6 +5,7 @@
 #include <cassert>
 
 using std::make_tuple;
+using std::minmax_element;
 
 static inline tuple<tuple<vector<float>>, vector<u32>>
 from_patches_and_elements(const vector<float> &nodes,
@@ -277,11 +278,9 @@ primitive_on_boundary(const vector<patch_info> &patches,
   return res;
 }
 
-static inline tuple<vector<u32>, vector<u32>>
-polygon_on_boundary(const vector<patch_info> &patches,
-                    const vector<float> &nodes,
-                    const vector<u32> &polygon_sizes,
-                    const vector<u32> &polygon_indices, const bool wireframe) {
+static inline tuple<vector<u32>, vector<u32>> polygon_on_boundary(
+    const vector<patch_info> &patches, const vector<float> &nodes,
+    const vector<u32> &polygon_sizes, const vector<u32> &polygon_indices) {
   assert(nodes.size() % 3 == 0);
   assert(!nodes.empty());
   assert(!patches.empty());
@@ -317,6 +316,156 @@ polygon_on_boundary(const vector<patch_info> &patches,
       }
       p += sz;
     }
+  }
+  return res;
+}
+
+static inline bool inside(const vector<u32> &I, const vector<u32> &J, u32 i,
+                          u32 j) {
+  i32 product = 1;
+  for (size_t index = 0; index + 1 < I.size(); ++index) {
+    auto i1 = I[index];
+    auto i2 = I[index + 1];
+    auto j1 = J[index];
+    auto j2 = J[index + 1];
+    auto dir = (i1 - i2) * (j - j2) - (i - i2) * (j1 - j2);
+    product *= dir > 0 ? 1 : dir < 0 ? -1 : 0;
+  }
+  auto i1 = I.front();
+  auto i2 = I.back();
+  auto j1 = J.front();
+  auto j2 = J.back();
+  auto dir = (i1 - i2) * (j - j2) - (i - i2) * (j1 - j2);
+  product *= dir > 0 ? 1 : dir < 0 ? -1 : 0;
+  return product <= 0;
+}
+
+static inline tuple<vector<u32>, vector<u32>, vector<u32>>
+mesh_coordinates(const vector<float> &vec, const vector<u32> &indices) {
+  tuple<vector<u32>, vector<u32>, vector<u32>> res;
+  auto &[x, y, z] = res;
+  for (auto i : indices) {
+    x.push_back((vec[3 * i] - mesh.x0) / mesh.cell_size);
+    y.push_back((vec[3 * i + 1] - mesh.y0) / mesh.cell_size);
+    z.push_back((vec[3 * i + 2] - mesh.z0) / mesh.cell_size);
+  }
+  return res;
+}
+
+template <size_t dim>
+static inline void find(const u32 i1, const u32 i2, const u32 j1, const u32 j2,
+                        const vector<frame> &frames, u32 i_patch,
+                        const patch_info &patch, const vector<u32> &I,
+                        const vector<u32> &J, vector<float> &sum, u32 &count) {
+  for (u32 i = i1; i <= i2; ++i) {
+    for (u32 j = j1; j <= j2; ++j) {
+      if (inside(I, J, i, j))
+        for (size_t index = 0; index < frames.size(); ++index) {
+          sum[index] +=
+              frames[index].data[i_patch].data[i + patch.length<dim>() * j];
+          count += 1;
+        }
+    }
+  }
+}
+
+static inline tuple<vector<u32>, vector<u32>, vector<float>>
+polygon_average(const vector<patch_info> &patches, const vector<float> &nodes,
+                const vector<u32> &polygon_sizes,
+                const vector<u32> &polygon_indices,
+                const vector<frame> &frames) {
+  assert(nodes.size() % 3 == 0);
+  assert(!nodes.empty());
+  assert(!patches.empty());
+  auto sum = accumulate(polygon_sizes.begin(), polygon_sizes.end(), 0);
+  assert(sum == polygon_indices.size());
+  tuple<vector<u32>, vector<u32>, vector<float>> res;
+  auto &[sizes, indices, data] = res;
+
+  auto _nodes = node_on_each_patch_boundary(patches, nodes);
+
+  constexpr float r = .01f;
+
+  auto &polygon_map = get_element_polygons();
+
+  size_t i_patch = 0;
+  for (const auto &set : _nodes) {
+    auto &patch = patches[i_patch];
+    auto p = polygon_indices.begin();
+    auto e = polygon_indices.end();
+    for (auto sz : polygon_sizes) {
+      assert(p < e);
+      vector<u32> polygon_vertex_indices = {p, p + sz};
+
+      bool in = true;
+      for (auto index : polygon_vertex_indices) {
+        if (!set_contains(set, index))
+          in = false;
+      }
+
+      if (in) {
+        for (auto i : polygon_vertex_indices)
+          indices.push_back(i);
+        sizes.push_back(sz);
+
+        const auto [I, J, K] = mesh_coordinates(nodes, indices);
+        const auto [_i1, _i2] = minmax_element(I.cbegin(), I.cend());
+        const auto [_j1, _j2] = minmax_element(J.cbegin(), J.cend());
+        const auto [_k1, _k2] = minmax_element(K.cbegin(), K.cend());
+        auto i1 = *_i1;
+        auto i2 = *_i2;
+        auto j1 = *_j1;
+        auto j2 = *_j2;
+        auto k1 = *_k1;
+        auto k2 = *_k2;
+
+        vector<float> sum(frames.size(), 0.f);
+        u32 count = 0;
+
+        switch (patches[i_patch].IOR) {
+#define CASE(ior, i1, i2, I1, I2)                                              \
+  case ior:                                                                    \
+  case -ior: {                                                                 \
+    for (u32 i1 = i1##1; i1 <= i1##2; ++i1) {                                  \
+      for (u32 i2 = i2##1; i2 <= i2##2; ++i2) {                                \
+        if (inside(I1, I2, i1, i2))                                            \
+          for (size_t index = 0; index < frames.size(); ++index) {             \
+            sum[index] +=                                                      \
+                frames[index].data[i_patch].data[i1 + patch.I1() * i2];        \
+            count += 1;                                                        \
+          }                                                                    \
+      }                                                                        \
+    }                                                                          \
+  } break;
+        case 1:
+        case -1:
+          find<1>(j1, j2, k1, k2, frames, i_patch, patch, J, K, sum, count);
+          break;
+        case 2:
+        case -2:
+          find<0>(i1, i2, k1, k2, frames, i_patch, patch, I, K, sum, count);
+          break;
+        case 3:
+        case -3:
+          find<0>(i1, i2, j1, j2, frames, i_patch, patch, I, J, sum, count);
+          break;
+        default:
+          assert(false);
+          break;
+        }
+
+        if (count > 0) {
+          for (auto &s : sum)
+            s /= count;
+        }
+
+        data.insert(data.end(), sum.cbegin(), sum.cend());
+      }
+
+      p += sz;
+    }
+
+    ++i_patch;
   }
   return res;
 }

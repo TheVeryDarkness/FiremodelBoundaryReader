@@ -435,6 +435,10 @@ Scroll to modify the scroll sensity when cursor is enabled.
   }
 }
 
+template <typename Ty>
+constexpr static inline size_t extent =
+    extent_v<Ty, 0> == 0 ? 1 : extent_v<Ty, 0>;
+
 template <typename T, size_t i, typename U>
 static inline void bind_attribute(const vector<U> &vec, const GLuint VBO) {
   glBindBuffer(GL_ARRAY_BUFFER, VBO);
@@ -442,8 +446,7 @@ static inline void bind_attribute(const vector<U> &vec, const GLuint VBO) {
                GL_STATIC_DRAW);
 
   static_assert(is_same_v<remove_all_extents_t<T>, U>, "Not matched.");
-  constexpr auto extent = extent_v<T, 0>;
-  constexpr auto length = extent == 0 ? 1 : extent;
+  constexpr auto length = extent<T>;
 
   glVertexAttribPointer(i, length, gl_type_enum_v<U>, GL_FALSE,
                         length * sizeof(U), 0);
@@ -573,6 +576,17 @@ static inline int visualize(GetData &&getData, GetNearFar &&getNearFar,
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
   glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(Index),
                indices.data(), GL_STATIC_DRAW);
+
+#ifndef NDEBUG
+  size_t out = 0;
+  size_t vc = std::get<0>(vertices).size() /
+              extent<std::tuple_element_t<0, tuple<Vertex...>>>;
+  for (auto i : indices)
+    if (i > vc)
+      ++out;
+  if (out > 0)
+    cerr << out << " vertices out of nodes count detected." << endl;
+#endif // !NDEBUG
 
   DETECT_ERROR;
 
@@ -911,10 +925,9 @@ static inline int visualize_polygons(const vector<float> &nodes,
   }
 }
 
-static inline int visualize_primitives_on_patch(const vector<float> &nodes,
-                                                const vector<u32> &vertex_count,
-                                                const vector<u32> &elements,
-                                                set<u32> nodes_on_patch) {
+static inline int visualize_primitives_on_patch(
+    const vector<patch_info> &patches, const vector<float> &nodes,
+    const vector<u32> &vertex_count, const vector<u32> &elements) {
   u32 sum = accumulate(vertex_count.cbegin(), vertex_count.cend(), 0);
   assert(elements.size() == sum);
   float _max =
@@ -926,12 +939,13 @@ static inline int visualize_primitives_on_patch(const vector<float> &nodes,
       return 0;
 
     visualize<GLuint>(
-        [&nodes, &nodes_on_patch, &vertex_count, &elements, sum,
-         ratio ]() -> auto{
-          auto t =
-              from_elements_if_in_set(nodes, vertex_count, elements, wireframe,
-                                      sum, nodes_on_patch, ratio);
-          return t;
+        [&nodes, &patches, &vertex_count, &elements, sum, ratio ]() -> auto{
+          auto indices =
+              primitive_on_boundary(patches, nodes, elements, wireframe);
+          auto _nodes = nodes;
+          for (auto &n : _nodes)
+            n *= ratio;
+          return make_tuple(make_tuple(_nodes), indices);
         },
         [&nodes]() constexpr->tuple<float, float> {
           return {0.01f, 500.f};

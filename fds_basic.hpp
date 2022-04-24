@@ -62,6 +62,19 @@ struct patch_info {
     }
   }
 
+  template <size_t sz> u32 length() const noexcept {
+    switch (sz) {
+    case 0:
+      return I();
+    case 1:
+      return J();
+    case 2:
+      return K();
+    default:
+      static_assert(sz == 0 || sz == 1 || sz == 2);
+    }
+  }
+
   u32 I() const noexcept { return I2 - I1 + 1; }
   u32 J() const noexcept { return J2 - J1 + 1; }
   u32 K() const noexcept { return K2 - K1 + 1; }

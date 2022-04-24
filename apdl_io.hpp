@@ -147,16 +147,24 @@ read_mapdl(istream &in) {
   return res;
 }
 
-static inline void write_table(ostream &o, const char *name, u32 index,
+static inline void write_table(ostream &o, const char *name, u32 surface_index,
+                               vector<u32> surface_indices,
                                const vector<frame> &frames,
                                const vector<float> &vec) {
-  o << "*DIM," << name << index << ",TABLE," << frames.size() << ",1,1,TIME,"
-    << name;
+  o << "*DIM," << name << surface_index + 1 << ",TABLE," << frames.size()
+    << ",1,1,TIME," << endl;
 
   size_t i = 0;
   for (const frame &frame : frames) {
-    o << "*SET," << name << index << "(" << i + 1 << ",0)," << frame.time;
-    o << "*SET," << name << index << "(" << i + 1 << ",1)," << vec[i];
+    o << "*SET," << name << surface_index + 1 << "(" << i + 1 << ",0),"
+      << frame.time << endl;
+    o << "*SET," << name << surface_index + 1 << "(" << i + 1 << ",1),"
+      << vec[i] << endl;
     ++i;
   }
+
+  o << "NSEL,NONE,,," << endl;
+  for (auto index : surface_indices)
+    o << "NSEL,A,NODE,," << index + 1 << endl;
+  o << "SF,ALL," << name << ",%" << name << surface_index + 1 << "%" << endl;
 }

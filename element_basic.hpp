@@ -250,111 +250,14 @@ static inline bool set_contains_all(const set<Ty> &s, initializer_list<Ty> l) {
   return true;
 }
 
-static inline tuple<tuple<vector<float>>, vector<GLuint>>
-from_elements_if_in_set(const vector<float> &nodes,
-                        const vector<u32> &vertex_count,
-                        const vector<u32> &elements, const bool wireframe,
-                        const u32 sum, const set<u32> &nodes_set,
-                        const float ratio) {
-  tuple<tuple<vector<float>>, vector<GLuint>> res;
-  auto &[vertices, indices] = res;
-  auto &[position] = vertices;
-  position = nodes;
-  for (auto &p : position)
-    p *= ratio;
-
-  indices.reserve(3 * sum);
-
-  u32 index = 0;
-
-  set<u32> unrecognized;
-
-  size_t out = 0;
-  if (wireframe) {
-    for (const auto &vc : vertex_count) {
-      auto &map = get_element_frames();
-      auto iter = map.find(vc);
-      if (iter != map.cend()) {
-        auto &[c, order] = *iter;
-        for (auto p = order.begin(); p != order.end();) {
-          auto i0 = *p++;
-          auto i1 = *p++;
-          assert(i0 < c);
-          assert(i1 < c);
-          auto _i0 = elements.at(index + i0);
-          auto _i1 = elements.at(index + i1);
-          if (_i0 >= sum)
-            ++out;
-          if (_i1 >= sum)
-            ++out;
-
-          if (set_contains_all(nodes_set, {_i0, _i1})) {
-            indices.push_back(_i0);
-            indices.push_back(_i1);
-          }
-        }
-      } else {
-        unrecognized.insert(vc);
-
-        for (auto p = elements.cbegin() + index;
-             p < elements.cbegin() + index + vc - 1; ++p) {
-          indices.push_back(*p);
-          indices.push_back(*(p + 1));
-        }
-      }
-      index += vc;
-    }
-  } else {
-    for (const auto &vc : vertex_count) {
-      auto &map = get_element_triangles();
-      auto iter = map.find(vc);
-      if (iter != map.cend()) {
-        auto &[c, order] = *iter;
-        for (auto p = order.begin(); p != order.end();) {
-          auto i0 = *p++;
-          auto i1 = *p++;
-          auto i2 = *p++;
-          assert(i0 < c);
-          assert(i1 < c);
-          assert(i2 < c);
-          auto _i0 = elements.at(index + i0);
-          auto _i1 = elements.at(index + i1);
-          auto _i2 = elements.at(index + i2);
-          if (_i0 >= sum)
-            ++out;
-          if (_i1 >= sum)
-            ++out;
-          if (_i2 >= sum)
-            ++out;
-          if (set_contains_all(nodes_set, {_i0, _i1, _i2})) {
-            indices.push_back(_i0);
-            indices.push_back(_i1);
-            indices.push_back(_i2);
-          }
-        }
-      } else {
-        unrecognized.insert(vc);
-
-        for (auto p = elements.cbegin() + index;
-             p < elements.cbegin() + index + vc - 2; ++p) {
-          indices.push_back(*p);
-          indices.push_back(*(p + 1));
-          indices.push_back(*(p + 2));
-        }
-      }
-      index += vc;
-    }
+static inline tuple<vector<float>, vector<float>, vector<float>>
+coordinates(const vector<float> &vec, const vector<u32> &indices) {
+  tuple<vector<float>, vector<float>, vector<float>> res;
+  auto &[x, y, z] = res;
+  for (auto i : indices) {
+    x.push_back(vec[3 * i]);
+    y.push_back(vec[3 * i + 1]);
+    z.push_back(vec[3 * i + 2]);
   }
-
-  if (!unrecognized.empty()) {
-    cout << "Element with ";
-    for (auto vc : unrecognized)
-      cout << vc << ' ';
-    cout << "nodes are not recoginzed." << endl;
-  }
-
-  if (out > 0)
-    clog << out << " indices out of nodes count are detected." << endl;
-
   return res;
 }
