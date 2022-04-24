@@ -142,13 +142,13 @@ static inline void onKey(GLFWwindow *window, const int key, int scancode,
   glfwSetWindowTitle(window, title.c_str());
 }
 
-static inline GLfloat sensitivity = 0.04f;
+static inline GLfloat sensitivity = 0.02f;
+static bool firstMouse = true;
 static inline void onMouseMove(GLFWwindow *window, double xposIn,
                                double yposIn) {
 
   float xpos = static_cast<float>(xposIn);
   float ypos = static_cast<float>(yposIn);
-  static bool firstMouse = true;
   static GLfloat lastX;
   static GLfloat lastY;
 
@@ -181,7 +181,7 @@ static inline void onMouseMove(GLFWwindow *window, double xposIn,
   cameraFront /= glm::length(cameraFront);
 }
 
-static inline GLfloat rate = 1;
+static inline GLfloat rate = 4;
 static inline void onScroll(GLFWwindow *window, double xoffset,
                             double yoffset) {
   if (cursor_enabled) {
@@ -351,8 +351,8 @@ static inline bool visualization_settings() {
          << "f - Display as wireframe: " << wireframe << endl
          << "c - Current patch:        " << current << endl
          << "m - Key move sensity:     " << key_move_sensity << endl
-         << "m - Mouse move sensity:   " << rate << endl
-         << "s - Scroll sensity:       " << sensitivity << endl
+         << "m - Mouse move sensity:   " << sensitivity << endl
+         << "s - Scroll sensity:       " << rate << endl
          << "F - Fullscreen:           " << fullScreen << endl
          << "W - Window width:         " << windowWidth << endl
          << "H - Window height:        " << windowHeight << endl
@@ -490,6 +490,8 @@ static inline int visualize(GetData &&getData, GetNearFar &&getNearFar,
 
   constexpr static auto vertexAttributesCount = sizeof...(Vertex);
 
+  firstMouse = true;
+
   glfwInit();
   glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
   glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
@@ -539,6 +541,7 @@ static inline int visualize(GetData &&getData, GetNearFar &&getNearFar,
   }
 #endif // !NDEBUG
 
+  glDisable(GL_CULL_FACE);
   glDisable(GL_DEPTH_TEST);
   glEnable(GL_BLEND);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -684,7 +687,6 @@ void main() {
   color = vec4(.6f, .6f, .6f, .1f);
 )";
   const char *main_end = R"(
-  color.a = color.a * exp(-gl_Position.z / 30);
 }
 )";
 

@@ -288,7 +288,7 @@ C - Save current result as CSV file.)";
 s - Select a patch.
 Y - Visualize polygons on boundary.
 N - Visualize nodes on boundary.
-V - Visualize elements primitives on boundary.)";
+R - Visualize elements primitives on boundary.)";
 
     if (!frames.empty())
       cout <<
@@ -353,10 +353,12 @@ d - Discard.
           break;
         }
         auto [polygon_sizes, polygon_indices] = get_polygon(sizes, elements);
-        auto indices_of_polygon_vertices_on_boundary = polygon_on_boundary(
-            patches, nodes, polygon_sizes, polygon_indices, wireframe);
+        auto [sizes_of_polygon_vertices_on_boundary,
+              indices_of_polygon_vertices_on_boundary] =
+            polygon_on_boundary(patches, nodes, polygon_sizes, polygon_indices,
+                                wireframe);
 
-        visualize_polygons(nodes, polygon_sizes,
+        visualize_polygons(nodes, sizes_of_polygon_vertices_on_boundary,
                            indices_of_polygon_vertices_on_boundary);
       }
       break;
@@ -373,7 +375,7 @@ d - Discard.
                                            indices_of_node_on_boundary.end()));
       }
       break;
-    case 'V':
+    case 'R':
       if (!patches.empty()) {
         const auto [nodes, sizes, elements] = read_nodes_and_elements();
         if (nodes.empty() || sizes.empty() || elements.empty()) {

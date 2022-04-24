@@ -159,18 +159,16 @@ static inline set<u32> node_on_boundary(const vector<patch_info> &patches,
   return res;
 }
 
-static inline vector<u32>
-primitive_on_boundary(const vector<patch_info> &patches,
-                      const vector<float> &nodes, const vector<u32> &elements,
-                      const bool wireframe) {
+static inline vector<set<u32>>
+node_on_each_patch_boundary(const vector<patch_info> &patches,
+                            const vector<float> &nodes) {
   assert(nodes.size() % 3 == 0);
   assert(!nodes.empty());
   assert(!patches.empty());
-  vector<u32> res;
+  vector<set<u32>> res;
+  res.resize(patches.size());
 
-  const auto _X = [&nodes](u32 i) { return nodes[3 * i]; };
-  const auto _Y = [&nodes](u32 i) { return nodes[3 * i + 1]; };
-  const auto _Z = [&nodes](u32 i) { return nodes[3 * i + 2]; };
+  u32 i = 0;
 
   float xmin = nodes[0], xmax = nodes[0], ymin = nodes[1], ymax = nodes[1],
         zmin = nodes[2], zmax = nodes[2];
@@ -210,23 +208,51 @@ primitive_on_boundary(const vector<patch_info> &patches,
        << "]*[" << Zmin << ", " << Zmax << "]" << endl;
 
   constexpr float r = .01f;
+  for (auto p = nodes.begin(), end = nodes.end(); p != end;) {
+    float x = *p++;
+    float y = *p++;
+    float z = *p++;
+    size_t i_patch = 0;
+    for (const auto &patch : patches) {
+      float x1 = mesh.x0 + patch.I1 * mesh.cell_size - mesh.cell_size * r;
+      float x2 = mesh.x0 + patch.I2 * mesh.cell_size + mesh.cell_size * r;
+      float y1 = mesh.y0 + patch.J1 * mesh.cell_size - mesh.cell_size * r;
+      float y2 = mesh.y0 + patch.J2 * mesh.cell_size + mesh.cell_size * r;
+      float z1 = mesh.z0 + patch.K1 * mesh.cell_size - mesh.cell_size * r;
+      float z2 = mesh.z0 + patch.K2 * mesh.cell_size + mesh.cell_size * r;
 
-  for (const auto &patch : patches) {
-    float X1 = mesh.x0 + patch.I1 * mesh.cell_size - mesh.cell_size * r;
-    float X2 = mesh.x0 + patch.I2 * mesh.cell_size + mesh.cell_size * r;
-    float Y1 = mesh.y0 + patch.J1 * mesh.cell_size - mesh.cell_size * r;
-    float Y2 = mesh.y0 + patch.J2 * mesh.cell_size + mesh.cell_size * r;
-    float Z1 = mesh.z0 + patch.K1 * mesh.cell_size - mesh.cell_size * r;
-    float Z2 = mesh.z0 + patch.K2 * mesh.cell_size + mesh.cell_size * r;
+      if (in_box(x, y, z, x1, x2, y1, y2, z1, z2)) {
+        res[i_patch].insert(i);
+        break;
+      }
+      ++i_patch;
+    }
+    ++i;
+  }
+  return res;
+}
 
+static inline vector<u32>
+primitive_on_boundary(const vector<patch_info> &patches,
+                      const vector<float> &nodes, const vector<u32> &elements,
+                      const bool wireframe) {
+  assert(nodes.size() % 3 == 0);
+  assert(!nodes.empty());
+  assert(!patches.empty());
+  vector<u32> res;
+
+  auto _nodes = node_on_each_patch_boundary(patches, nodes);
+
+  constexpr float r = .01f;
+
+  for (const auto &set : _nodes) {
     if (wireframe)
       for (auto p = elements.begin(), end = elements.end(); p != end;) {
         u32 i0 = *p++;
         u32 i1 = *p++;
         assert(i0 < nodes.size());
         assert(i1 < nodes.size());
-        if (in_box(_X(i0), _Y(i0), _Z(i0), X1, X2, Y1, Y2, Z1, Z2) &&
-            in_box(_X(i1), _Y(i1), _Z(i1), X1, X2, Y1, Y2, Z1, Z2)) {
+        if (set_contains_all(set, {i0, i1})) {
           res.push_back(i0);
           res.push_back(i1);
           break;
@@ -240,9 +266,7 @@ primitive_on_boundary(const vector<patch_info> &patches,
         assert(i0 < nodes.size());
         assert(i1 < nodes.size());
         assert(i2 < nodes.size());
-        if (in_box(_X(i0), _Y(i0), _Z(i0), X1, X2, Y1, Y2, Z1, Z2) &&
-            in_box(_X(i1), _Y(i1), _Z(i1), X1, X2, Y1, Y2, Z1, Z2) &&
-            in_box(_X(i2), _Y(i2), _Z(i2), X1, X2, Y1, Y2, Z1, Z2)) {
+        if (set_contains_all(set, {i0, i1, i2})) {
           res.push_back(i0);
           res.push_back(i1);
           res.push_back(i2);
@@ -253,7 +277,7 @@ primitive_on_boundary(const vector<patch_info> &patches,
   return res;
 }
 
-static inline vector<u32>
+static inline tuple<vector<u32>, vector<u32>>
 polygon_on_boundary(const vector<patch_info> &patches,
                     const vector<float> &nodes,
                     const vector<u32> &polygon_sizes,
@@ -263,60 +287,16 @@ polygon_on_boundary(const vector<patch_info> &patches,
   assert(!patches.empty());
   auto sum = accumulate(polygon_sizes.begin(), polygon_sizes.end(), 0);
   assert(sum == polygon_indices.size());
-  vector<u32> res;
+  tuple<vector<u32>, vector<u32>> res;
+  auto &[sizes, indices] = res;
 
-  const auto _X = [&nodes](u32 i) { return nodes[3 * i]; };
-  const auto _Y = [&nodes](u32 i) { return nodes[3 * i + 1]; };
-  const auto _Z = [&nodes](u32 i) { return nodes[3 * i + 2]; };
-
-  float xmin = nodes[0], xmax = nodes[0], ymin = nodes[1], ymax = nodes[1],
-        zmin = nodes[2], zmax = nodes[2];
-  for (auto p = nodes.begin(), end = nodes.end(); p != end;) {
-    float x = *p++;
-    float y = *p++;
-    float z = *p++;
-    xmin = min(x, xmin);
-    xmax = max(x, xmax);
-    ymin = min(y, ymin);
-    ymax = max(y, ymax);
-    zmin = min(z, zmin);
-    zmax = max(z, zmax);
-  }
-  auto &f = patches.front();
-  u32 Imin = f.I1, Imax = f.I2, Jmin = f.J1, Jmax = f.J2, Kmin = f.K1,
-      Kmax = f.K2;
-  for (auto &p : patches) {
-    Imin = min(p.I1, Imin);
-    Imax = max(p.I2, Imax);
-    Jmin = min(p.J1, Jmin);
-    Jmax = max(p.J2, Jmax);
-    Kmin = min(p.K1, Kmin);
-    Kmax = max(p.K2, Kmax);
-  }
-
-  float Xmin = mesh.x0 + Imin * mesh.cell_size;
-  float Xmax = mesh.x0 + Imax * mesh.cell_size;
-  float Ymin = mesh.y0 + Jmin * mesh.cell_size;
-  float Ymax = mesh.y0 + Jmax * mesh.cell_size;
-  float Zmin = mesh.z0 + Kmin * mesh.cell_size;
-  float Zmax = mesh.z0 + Kmax * mesh.cell_size;
-
-  cout << "Nodes:  [" << xmin << ", " << xmax << "]*[" << ymin << ", " << ymax
-       << "]*[" << zmin << ", " << zmax << "]" << endl;
-  cout << "Meshes: [" << Xmin << ", " << Xmax << "]*[" << Ymin << ", " << Ymax
-       << "]*[" << Zmin << ", " << Zmax << "]" << endl;
+  auto _nodes = node_on_each_patch_boundary(patches, nodes);
 
   constexpr float r = .01f;
 
   auto &polygon_map = get_element_polygons();
 
-  for (const auto &patch : patches) {
-    float X1 = mesh.x0 + patch.I1 * mesh.cell_size - mesh.cell_size * r;
-    float X2 = mesh.x0 + patch.I2 * mesh.cell_size + mesh.cell_size * r;
-    float Y1 = mesh.y0 + patch.J1 * mesh.cell_size - mesh.cell_size * r;
-    float Y2 = mesh.y0 + patch.J2 * mesh.cell_size + mesh.cell_size * r;
-    float Z1 = mesh.z0 + patch.K1 * mesh.cell_size - mesh.cell_size * r;
-    float Z2 = mesh.z0 + patch.K2 * mesh.cell_size + mesh.cell_size * r;
+  for (const auto &set : _nodes) {
 
     auto p = polygon_indices.begin();
     auto e = polygon_indices.end();
@@ -326,14 +306,15 @@ polygon_on_boundary(const vector<patch_info> &patches,
 
       bool in = true;
       for (auto index : polygon_vertex_indices) {
-        if (!in_box(_X(index), _Y(index), _Z(index), X1, X2, Y1, Y2, Z1, Z2))
+        if (!set_contains(set, index))
           in = false;
       }
 
-      if (in)
+      if (in) {
         for (auto i : polygon_vertex_indices)
-          res.push_back(i);
-
+          indices.push_back(i);
+        sizes.push_back(sz);
+      }
       p += sz;
     }
   }
