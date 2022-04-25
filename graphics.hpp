@@ -478,9 +478,9 @@ static inline void bind_attributes(const tuple<vector<U>...> &vec,
 }
 
 template <typename Index, typename GetData, typename GetNearFar,
-          typename GetDrawMode, typename... Vertex>
+          typename GetDrawMode, typename GetMinMax, typename... Vertex>
 static inline int visualize(GetData &&getData, GetNearFar &&getNearFar,
-                            GetDrawMode &&getDrawMode,
+                            GetDrawMode &&getDrawMode, GetMinMax &&getMinMax,
                             initializer_list<const char *> vertexShaderSource,
                             initializer_list<const char *> fragmentShaderSource,
                             type_list<Vertex...>) {
@@ -612,6 +612,20 @@ static inline int visualize(GetData &&getData, GetNearFar &&getNearFar,
   DETECT_ERROR;
 
   auto mode = getDrawMode();
+  if constexpr (!is_same_v<GetMinMax, nullptr_t>) {
+    const auto [min, max] = getMinMax();
+
+    static_assert(is_same_v<decay_t<decltype(min)>, float>);
+    static_assert(is_same_v<decay_t<decltype(max)>, float>);
+
+    glUniform1f(glGetUniformLocation(shaderProgram, "min"), min);
+
+    DETECT_ERROR;
+
+    glUniform1f(glGetUniformLocation(shaderProgram, "max"), max);
+
+    DETECT_ERROR;
+  }
 
   // Render loop
   while (!glfwWindowShouldClose(window)) {
@@ -664,11 +678,10 @@ layout (location = 0) in vec3 aPos;
 uniform mat4 pv;
 out vec4 color;
 )";
-  const char *index = R"(
-layout(location = 1) in float index;
-)";
-  const char *temperature = R"(
-layout(location = 1) in float temperature;
+  const char *data = R"(
+layout(location = 1) in float data;
+uniform float min;
+uniform float max;
 )";
   const char *highlight = R"(
 uniform uint highlighted;
@@ -677,27 +690,32 @@ uniform uint highlighted;
 void main() {
  gl_Position = pv * vec4(aPos.x, aPos.y, aPos.z, 1.0);
 )";
-  const char *main_wave_length_to_rgb = R"(
+  // 2897772.1
+  const char *main_data_to_rgb = R"(
  float rr = 2800;
  float rg = 2000;
  float rb = 1200;
  float ti = 2;
- float wave_length = 2897772.1 / (temperature + 273.15) / 15;
- color = vec4(
-  0.41 * pow(2, -pow(abs(wave_length - 595), ti) / rr),
-  0.82 * pow(2, -pow(abs(wave_length - 530), ti) / rg),
-  0.40 * pow(2, -pow(abs(wave_length - 460), ti) / rb),
-  .6f
- );
+ float wave_length = 660 - 260 * (data - min) / (max - min);
+ if (min == max) {
+  color = vec4(1, 1, 1, .8f);
+ } else {
+  color = vec4(
+   0.41 * pow(2, -pow(abs(wave_length - 595), ti) / rr),
+   0.82 * pow(2, -pow(abs(wave_length - 530), ti) / rg),
+   0.40 * pow(2, -pow(abs(wave_length - 460), ti) / rb),
+   .8f
+  );
+ }
 )";
   const char *main_highlight = R"(
- if (highlighted == index) {
+ if (highlighted == data) {
   color = vec4(.8f, .1f, .0f, .8f);
  } else {
   color = vec4(.6f, .6f, .6f, .4f);
  }
 )";
-  const char *main_color = R"(
+  const char *main_default_color = R"(
   color = vec4(.6f, .6f, .6f, .4f);
 )";
   const char *main_end = R"(
@@ -709,10 +727,10 @@ void main() {
 const char *get_color(data_category category) {
   switch (category) {
   case data_category::temperature:
-    return vertexShaderSource.main_wave_length_to_rgb;
+    return vertexShaderSource.main_data_to_rgb;
   case data_category::other:
   default:
-    return vertexShaderSource.main_color;
+    return vertexShaderSource.main_default_color;
   }
 }
 
@@ -723,7 +741,7 @@ in vec4 color;
 
 void main() {
  gl_FragColor = color;
- gl_FragColor.a = gl_FragColor.a * (1 + gl_FragCoord.z * 0.1) / (1 + 0.4 * gl_FragCoord.z);
+ gl_FragColor.a = gl_FragColor.a / (1 + gl_FragCoord.z);
 }
 )";
 
@@ -772,8 +790,8 @@ static inline int visualize_patch(const vector<patch_info> &patches) {
         [&patches]() -> tuple<float, float> {
           return {defaultNear, patch_far(patches)};
         },
-        defaultDrawMode,
-        {vertexShaderSource.head_pos_pv_color, vertexShaderSource.index,
+        defaultDrawMode, nullptr,
+        {vertexShaderSource.head_pos_pv_color, vertexShaderSource.data,
          vertexShaderSource.highlight, vertexShaderSource.main_begin,
          vertexShaderSource.main_highlight, vertexShaderSource.main_end},
         {fragmentShaderSource}, type_list<GLuint[3], GLuint>{});
@@ -785,6 +803,15 @@ static inline int visualize_frame(const vector<patch_info> &patches,
     if (!visualization_settings())
       return 0;
 
+    float _min = frame.data.front().data.front();
+    float _max = frame.data.front().data.front();
+    for (auto &patch_frame : frame.data) {
+      auto &data = patch_frame.data;
+      auto [__min, __max] = minmax_element(data.begin(), data.end());
+      _min = min(_min, *__min);
+      _max = max(_max, *__max);
+    }
+
     visualize<GLuint>(
         [&patches, &frame ]() -> auto{
           glPointSize(10);
@@ -793,8 +820,8 @@ static inline int visualize_frame(const vector<patch_info> &patches,
         [&patches]() constexpr->tuple<float, float> {
           return {defaultNear, patch_far(patches)};
         },
-        []() { return GL_POINTS; },
-        {vertexShaderSource.head_pos_pv_color, vertexShaderSource.temperature,
+        []() { return GL_POINTS; }, [=]() { return make_tuple(_min, _max); },
+        {vertexShaderSource.head_pos_pv_color, vertexShaderSource.data,
          vertexShaderSource.main_begin, get_color(category),
          vertexShaderSource.main_end},
         {fragmentShaderSource}, type_list<GLuint[3], float>{});
@@ -814,9 +841,9 @@ static inline int visualize_data(const vector<float> &data, u32 m, u32 n) {
                                        *max_element(data.cbegin(), data.cend()),
                                        (float)m, (float)n})};
         },
-        defaultDrawMode,
+        defaultDrawMode, nullptr,
         {vertexShaderSource.head_pos_pv_color, vertexShaderSource.main_begin,
-         vertexShaderSource.main_color, vertexShaderSource.main_end},
+         vertexShaderSource.main_default_color, vertexShaderSource.main_end},
         {fragmentShaderSource}, type_list<float[3]>{});
   }
 }
@@ -841,9 +868,9 @@ static inline int visualize_3d_elements(const vector<float> &nodes,
         [&nodes]() constexpr->tuple<float, float> {
           return {defaultNear, defaultFar};
         },
-        defaultDrawMode,
+        defaultDrawMode, nullptr,
         {vertexShaderSource.head_pos_pv_color, vertexShaderSource.main_begin,
-         vertexShaderSource.main_color, vertexShaderSource.main_end},
+         vertexShaderSource.main_default_color, vertexShaderSource.main_end},
         {fragmentShaderSource}, type_list<float[3]>{});
   }
 }
@@ -869,9 +896,9 @@ static inline int visualize_patches_and_elements(
         [&nodes]() constexpr->tuple<float, float> {
           return {defaultNear, defaultFar};
         },
-        defaultDrawMode,
+        defaultDrawMode, nullptr,
         {vertexShaderSource.head_pos_pv_color, vertexShaderSource.main_begin,
-         vertexShaderSource.main_color, vertexShaderSource.main_end},
+         vertexShaderSource.main_default_color, vertexShaderSource.main_end},
         {fragmentShaderSource}, type_list<float[3]>{});
   }
 }
@@ -897,9 +924,9 @@ static inline int visualize_nodes(const vector<float> &nodes,
         [&nodes]() constexpr->tuple<float, float> {
           return {defaultNear, defaultFar};
         },
-        []() { return GL_POINTS; },
+        []() { return GL_POINTS; }, nullptr,
         {vertexShaderSource.head_pos_pv_color, vertexShaderSource.main_begin,
-         vertexShaderSource.main_color, vertexShaderSource.main_end},
+         vertexShaderSource.main_default_color, vertexShaderSource.main_end},
         {fragmentShaderSource}, type_list<float[3]>{});
   }
 }
@@ -924,9 +951,9 @@ static inline int visualize_primitives(const vector<float> &nodes,
         [&nodes]() constexpr->tuple<float, float> {
           return {defaultNear, defaultFar};
         },
-        defaultDrawMode,
+        defaultDrawMode, nullptr,
         {vertexShaderSource.head_pos_pv_color, vertexShaderSource.main_begin,
-         vertexShaderSource.main_color, vertexShaderSource.main_end},
+         vertexShaderSource.main_default_color, vertexShaderSource.main_end},
         {fragmentShaderSource}, type_list<float[3]>{});
   }
 }
@@ -953,9 +980,9 @@ static inline int visualize_primitives(const vector<float> &nodes,
         [&nodes]() constexpr->tuple<float, float> {
           return {defaultNear, defaultFar};
         },
-        defaultDrawMode,
+        defaultDrawMode, nullptr,
         {vertexShaderSource.head_pos_pv_color, vertexShaderSource.main_begin,
-         vertexShaderSource.main_color, vertexShaderSource.main_end},
+         vertexShaderSource.main_default_color, vertexShaderSource.main_end},
         {fragmentShaderSource}, type_list<float[3]>{});
   }
 }
