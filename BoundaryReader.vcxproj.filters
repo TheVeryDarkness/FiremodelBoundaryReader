@@ -56,5 +56,8 @@
     <ClInclude Include="shared.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="debug.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
