@@ -802,7 +802,7 @@ static inline float patch_far(const vector<patch_info> &patches) {
 }
 
 constexpr static inline float defaultNear = .01f;
-constexpr static inline float defaultFar = 2000.f;
+constexpr static inline float defaultFar = 1000.f;
 
 static inline int visualize_patch(const vector<patch_info> &patches) {
 

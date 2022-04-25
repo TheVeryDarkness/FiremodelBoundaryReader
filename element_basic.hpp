@@ -159,6 +159,12 @@ static inline vector<u32> from_polygons(const vector<u32> &polygon_sizes,
   return res;
 }
 
+/// @brief Return real indices of nodes.
+/// @param nodes: Nodes coordinates.
+/// @param vertex_count: Count of nodes in elements
+/// @param elements: Indices of nodes in element.
+/// @param wireframe
+/// @return Real indices of nodes in primitives.
 static inline vector<u32> get_primitives(const vector<float> &nodes,
                                          const vector<u32> &vertex_count,
                                          const vector<u32> &elements,
@@ -225,14 +231,11 @@ static inline vector<u32> get_primitives(const vector<float> &nodes,
   }
 
   if (!unrecognized.empty()) {
-    cout << "Element with ";
+    cerr << "Element with ";
     for (auto vc : unrecognized)
-      cout << vc << ' ';
-    cout << "nodes are not recoginzed." << endl;
+      cerr << vc << ' ';
+    cerr << "nodes are not recoginzed." << endl;
   }
-
-  if (out > 0)
-    clog << out << " indices out of nodes count are detected." << endl;
 
   return indices;
 }

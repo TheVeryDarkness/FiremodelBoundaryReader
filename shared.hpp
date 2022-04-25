@@ -254,8 +254,8 @@ static inline vector<u32> primitive_on_boundary(
            p != end;) {
         u32 i0 = *p++;
         u32 i1 = *p++;
-        assert(i0 < nodes.size());
-        assert(i1 < nodes.size());
+        assert(i0 < nodes.size() / 3);
+        assert(i1 < nodes.size() / 3);
         if (set_contains_all(set, {i0, i1})) {
           res.push_back(i0);
           res.push_back(i1);
@@ -268,9 +268,9 @@ static inline vector<u32> primitive_on_boundary(
         u32 i0 = *p++;
         u32 i1 = *p++;
         u32 i2 = *p++;
-        assert(i0 < nodes.size());
-        assert(i1 < nodes.size());
-        assert(i2 < nodes.size());
+        assert(i0 < nodes.size() / 3);
+        assert(i1 < nodes.size() / 3);
+        assert(i2 < nodes.size() / 3);
         if (set_contains_all(set, {i0, i1, i2})) {
           res.push_back(i0);
           res.push_back(i1);
@@ -298,6 +298,7 @@ static inline tuple<vector<u32>, vector<u32>> polygon_on_boundary(
   constexpr float r = .01f;
 
   auto &polygon_map = get_element_polygons();
+  vector<u32> polygon_vertex_indices;
 
   for (const auto &set : _nodes) {
 
@@ -305,17 +306,22 @@ static inline tuple<vector<u32>, vector<u32>> polygon_on_boundary(
     auto e = polygon_indices.end();
     for (auto sz : polygon_sizes) {
       assert(p < e);
-      vector<u32> polygon_vertex_indices = {p, p + sz};
+      polygon_vertex_indices.clear();
+      polygon_vertex_indices.insert(polygon_vertex_indices.cend(), p, p + sz);
 
       bool in = true;
       for (auto index : polygon_vertex_indices) {
-        if (!set_contains(set, index))
+        if (!set_contains(set, index)) {
           in = false;
+          break;
+        }
       }
 
       if (in) {
-        for (auto i : polygon_vertex_indices)
+        for (auto i : polygon_vertex_indices) {
+          assert(i < nodes.size() / 3);
           indices.push_back(i);
+        }
         sizes.push_back(sz);
       }
       p += sz;
@@ -347,7 +353,7 @@ static inline bool inside(const vector<u32> &I, const vector<u32> &J, u32 i,
     i64f j1 = J[index];
     i64f j2 = J[index + 1];
     auto dir = (i2 - i1) * (j - j1) - (j2 - j1) * (i - i1);
-    res &= (sign(dir) * last >= 0);
+    res = res && (sign(dir) * last >= 0);
   }
   return res;
 }
