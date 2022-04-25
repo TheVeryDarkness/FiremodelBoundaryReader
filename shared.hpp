@@ -405,7 +405,7 @@ polygon_average(const vector<patch_info> &patches, const vector<float> &nodes,
   vector<float> sum;
   vector<u32> polygon_vertex_indices;
 
-  size_t i_patch = 0;
+  u32 i_patch = 0;
   for (const auto &set : _nodes) {
     auto &patch = patches[i_patch];
     auto p = polygon_indices.begin();

@@ -694,11 +694,11 @@ void main() {
  if (highlighted == index) {
   color = vec4(.8f, .1f, .0f, .8f);
  } else {
-  color = vec4(.6f, .6f, .6f, .1f);
+  color = vec4(.6f, .6f, .6f, .4f);
  }
 )";
   const char *main_color = R"(
-  color = vec4(.6f, .6f, .6f, .1f);
+  color = vec4(.6f, .6f, .6f, .4f);
 )";
   const char *main_end = R"(
 }
@@ -723,6 +723,7 @@ in vec4 color;
 
 void main() {
  gl_FragColor = color;
+ gl_FragColor.a = gl_FragColor.a * (1 + gl_FragCoord.z * 0.1) / (1 + 0.4 * gl_FragCoord.z);
 }
 )";
 
@@ -736,10 +737,10 @@ static inline float patch_far(const vector<patch_info> &patches) {
   for (const auto &patch : patches) {
     I1 = min(patch.I1, I1);
     I2 = max(patch.I2, I2);
-    J1 = min(patch.I1, J1);
-    J2 = max(patch.I1, J2);
-    K1 = min(patch.I1, K1);
-    K2 = max(patch.I1, K2);
+    J1 = min(patch.J1, J1);
+    J2 = max(patch.J2, J2);
+    K1 = min(patch.K1, K1);
+    K2 = max(patch.K2, K2);
   }
   float far = 100.;
   if (patches.size() > 0) {
@@ -747,7 +748,7 @@ static inline float patch_far(const vector<patch_info> &patches) {
     I = I2 - I1;
     J = J2 - J1;
     K = K2 - K1;
-    far = float(sqrt(I * I + J * J + K * K) * 5);
+    far = max(far, float(sqrt(I * I + J * J + K * K) * 5));
   }
   return far;
 }
@@ -834,8 +835,8 @@ static inline int visualize_3d_elements(const vector<float> &nodes,
       return 0;
 
     visualize<GLuint>(
-        [&nodes, &vertex_count, &elements, sum, ratio]() {
-          return from_elements(nodes, vertex_count, elements, wireframe, sum);
+        [&nodes, &vertex_count, &elements, ratio]() {
+          return from_elements(nodes, vertex_count, elements, wireframe, ratio);
         },
         [&nodes]() constexpr->tuple<float, float> {
           return {defaultNear, defaultFar};

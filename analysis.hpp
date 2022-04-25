@@ -465,7 +465,7 @@ d - Discard.
 
       const auto N = frames.size();
       assert(boundary_data.size() == on_boundary_polygon_sizes.size() * N);
-      size_t i = 0;
+      u32 i = 0;
       auto p = on_boundary_polygon_indices.begin();
       auto e = on_boundary_polygon_indices.end();
       auto P = boundary_data.begin();

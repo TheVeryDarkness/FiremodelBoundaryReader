@@ -163,7 +163,7 @@ static inline vector<u32> get_primitives(const vector<float> &nodes,
                                          const bool wireframe) {
   vector<u32> indices;
 
-  auto sum = accumulate(vertex_count.begin(), vertex_count.end(), 0);
+  u32 sum = accumulate(vertex_count.begin(), vertex_count.end(), 0U);
   indices.reserve(3 * sum);
 
   u32 index = 0;
