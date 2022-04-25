@@ -4,8 +4,10 @@
 #include "fds_basic.hpp"
 #include <cassert>
 
+using std::int_fast64_t;
 using std::make_tuple;
 using std::minmax_element;
+using std::uint_fast8_t;
 
 static inline tuple<tuple<vector<float>>, vector<u32>>
 from_patches_and_elements(const vector<float> &nodes,
@@ -322,24 +324,32 @@ static inline tuple<vector<u32>, vector<u32>> polygon_on_boundary(
   return res;
 }
 
+static inline int_fast8_t sign(int_fast64_t i) {
+  return i > 0 ? 1 : i < 0 ? -1 : 0;
+}
+
 static inline bool inside(const vector<u32> &I, const vector<u32> &J, u32 i,
                           u32 j) {
-  i32 product = 1;
+  using i64f = int_fast64_t;
+  uint_fast8_t last = [&I, &J, i, j]() {
+    i64f i1 = I.back();
+    i64f i2 = I.front();
+    i64f j1 = J.back();
+    i64f j2 = J.front();
+    auto dir = (i2 - i1) * (j - j1) - (j2 - j1) * (i - i1);
+    return sign(dir);
+  }();
+  //  Pi+1Pi cross PPi
+  bool res = true;
   for (size_t index = 0; index + 1 < I.size(); ++index) {
-    auto i1 = I[index];
-    auto i2 = I[index + 1];
-    auto j1 = J[index];
-    auto j2 = J[index + 1];
-    auto dir = (i1 - i2) * (j - j2) - (i - i2) * (j1 - j2);
-    product *= dir > 0 ? 1 : dir < 0 ? -1 : 0;
+    i64f i1 = I[index];
+    i64f i2 = I[index + 1];
+    i64f j1 = J[index];
+    i64f j2 = J[index + 1];
+    auto dir = (i2 - i1) * (j - j1) - (j2 - j1) * (i - i1);
+    res &= (sign(dir) * last >= 0);
   }
-  auto i1 = I.front();
-  auto i2 = I.back();
-  auto j1 = J.front();
-  auto j2 = J.back();
-  auto dir = (i1 - i2) * (j - j2) - (i - i2) * (j1 - j2);
-  product *= dir > 0 ? 1 : dir < 0 ? -1 : 0;
-  return product <= 0;
+  return res;
 }
 
 static inline tuple<vector<u32>, vector<u32>, vector<u32>>
