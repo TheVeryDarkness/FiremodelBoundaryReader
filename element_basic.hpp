@@ -116,8 +116,10 @@ get_polygon(const vector<u32> &sizes, const vector<u32> &indices) {
     auto &[polygon_size, polygon_vertex_indices] = map.at(sz);
     for (size_t i = 0; i < polygon_vertex_indices.size() / polygon_size; ++i)
       polygon_sizes.push_back(polygon_size);
-    for (auto polygon_vertex_index : polygon_vertex_indices)
+    for (auto polygon_vertex_index : polygon_vertex_indices) {
+      assert(polygon_vertex_index < sz);
       polygon_indices.push_back(*(p + polygon_vertex_index));
+    }
     p += sz;
   }
   return res;
@@ -137,8 +139,8 @@ static inline vector<u32> from_polygons(const vector<u32> &polygon_sizes,
 
     if (wireframe) {
       for (size_t i = 1; i < size; ++i) {
-        res.push_back(*(p + i));
         res.push_back(*(p + i - 1));
+        res.push_back(*(p + i));
       }
       res.push_back(*p);
       res.push_back(*(p + size - 1));
@@ -265,6 +267,9 @@ static inline tuple<vector<float>, vector<float>, vector<float>>
 coordinates(const vector<float> &vec, const vector<u32> &indices) {
   tuple<vector<float>, vector<float>, vector<float>> res;
   auto &[x, y, z] = res;
+  x.reserve(indices.size());
+  y.reserve(indices.size());
+  z.reserve(indices.size());
   for (auto i : indices) {
     x.push_back(vec[3 * i]);
     y.push_back(vec[3 * i + 1]);
