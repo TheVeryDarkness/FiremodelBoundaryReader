@@ -150,9 +150,6 @@ static inline vector<u32> from_polygons(const vector<u32> &polygon_sizes,
         res.push_back(*(p + i - 1));
         res.push_back(*(p + i));
       }
-      res.push_back(*p);
-      res.push_back(*(p + 1));
-      res.push_back(*(p + size - 1));
     }
     p += size;
   }
