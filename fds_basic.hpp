@@ -7,6 +7,7 @@
 using std::array;
 using std::conditional_t;
 using std::lexicographical_compare;
+using std::numeric_limits;
 using std::tuple;
 
 struct patch_info {
@@ -72,6 +73,21 @@ struct patch_info {
       return K();
     default:
       static_assert(sz == 0 || sz == 1 || sz == 2);
+      return numeric_limits<u32>::max();
+    }
+  }
+
+  template <size_t sz> tuple<u32, u32> border() const noexcept {
+    switch (sz) {
+    case 0:
+      return {I1, I2};
+    case 1:
+      return {J1, J2};
+    case 2:
+      return {K1, K2};
+    default:
+      static_assert(sz == 0 || sz == 1 || sz == 2);
+      return {u32(0), numeric_limits<u32>::max()};
     }
   }
 
@@ -98,6 +114,8 @@ constexpr static inline bool compare(const array<char, 30 + 1> &a,
   return lexicographical_compare(a.data(), a.data() + len + 1, b,
                                  b + len + 1) == 0;
 }
+
+static inline size_t selected_patch = numeric_limits<size_t>::max();
 
 constexpr static inline data_category
 get_data_category(const array<char, 30 + 1> &units) {
@@ -251,7 +269,7 @@ from_data(const vector<patch_info> &patches, const frame &frame) {
           position.push_back(i);
           position.push_back(j);
           position.push_back(k);
-          indices.push_back(indices.size());
+          indices.push_back((u32)indices.size());
         }
       }
     }

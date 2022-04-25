@@ -157,17 +157,13 @@ static inline vector<u32> from_polygons(const vector<u32> &polygon_sizes,
   return res;
 }
 
-static inline tuple<tuple<vector<float>>, vector<GLuint>>
-from_elements(const vector<float> &nodes, const vector<u32> &vertex_count,
-              const vector<u32> &elements, const bool wireframe, const u32 sum,
-              const float ratio) {
-  tuple<tuple<vector<float>>, vector<GLuint>> res;
-  auto &[vertices, indices] = res;
-  auto &[position] = vertices;
-  position = nodes;
-  for (auto &p : position)
-    p *= ratio;
+static inline vector<u32> get_primitives(const vector<float> &nodes,
+                                         const vector<u32> &vertex_count,
+                                         const vector<u32> &elements,
+                                         const bool wireframe) {
+  vector<u32> indices;
 
+  auto sum = accumulate(vertex_count.begin(), vertex_count.end(), 0);
   indices.reserve(3 * sum);
 
   u32 index = 0;
@@ -236,6 +232,21 @@ from_elements(const vector<float> &nodes, const vector<u32> &vertex_count,
   if (out > 0)
     clog << out << " indices out of nodes count are detected." << endl;
 
+  return indices;
+}
+
+static inline tuple<tuple<vector<float>>, vector<GLuint>>
+from_elements(const vector<float> &nodes, const vector<u32> &vertex_count,
+              const vector<u32> &elements, const bool wireframe,
+              const float ratio) {
+  tuple<tuple<vector<float>>, vector<GLuint>> res;
+  auto &[vertices, indices] = res;
+  auto &[position] = vertices;
+  position = nodes;
+  for (auto &p : position)
+    p *= ratio;
+
+  indices = get_primitives(nodes, vertex_count, elements, wireframe);
   return res;
 }
 

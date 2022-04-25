@@ -3,13 +3,19 @@
 #include "fds_basic.hpp"
 #include "io.hpp"
 #include <cassert>
+#include <filesystem>
+#include <fstream>
 #include <string>
 
 using std::clog;
 using std::conditional_t;
 using std::getline;
+using std::ofstream;
 using std::string;
 using std::string_view;
+using std::to_string;
+using std::filesystem::absolute;
+using std::filesystem::path;
 
 template <size_t ParameterCount, bool withSize, size_t SizeAt>
 static inline tuple<vector<u32>, u32> read_element_in_apdl(istream &in,
@@ -147,19 +153,24 @@ read_mapdl(istream &in) {
   return res;
 }
 
-static inline void write_table(ostream &o, const char *name, u32 surface_index,
+static inline void write_table(ostream &o, const path &directory,
+                               const char *name, u32 surface_index,
                                vector<u32> surface_indices,
                                const vector<frame> &frames,
                                const vector<float> &vec) {
-  o << "*DIM," << name << surface_index + 1 << ",TABLE," << frames.size()
-    << ",1,1,TIME," << endl;
+  o << "*DIM, " << name << surface_index + 1 << ", TABLE, " << frames.size()
+    << ", 1, 1, TIME," << endl;
+  o << "*TREAD, " << name << surface_index + 1 << ", " << surface_index
+    << ", txt, " << absolute(directory).generic_string() << ",1 " << endl;
 
   size_t i = 0;
+  ofstream tout(directory /
+                path(to_string(surface_index)).replace_extension(path("txt")));
+  assert(tout);
+  tout << "TIME " << name << endl;
+
   for (const frame &frame : frames) {
-    o << "*SET," << name << surface_index + 1 << "(" << i + 1 << ",0),"
-      << frame.time << endl;
-    o << "*SET," << name << surface_index + 1 << "(" << i + 1 << ",1),"
-      << vec[i] << endl;
+    tout << frame.time << " " << vec[i] * 1000 << endl;
     ++i;
   }
 

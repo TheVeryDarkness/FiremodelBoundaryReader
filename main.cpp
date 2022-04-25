@@ -187,9 +187,9 @@ q - quit
     auto di = directory_iterator(cp);
 
     cout << endl << cp.string() << "> ";
-    char opt = 'q';
-    cin >> opt;
-    switch (opt) {
+    char opt0 = 'q';
+    cin >> opt0;
+    switch (opt0) {
     case 'd': {
       auto dir = request_file_by_id(
           di, [](const directory_entry &entry) { return entry.is_directory(); },

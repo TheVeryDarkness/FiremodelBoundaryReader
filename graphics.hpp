@@ -87,7 +87,7 @@ static inline float lastFrame = 0.0f;
 
 static inline bool cursor_enabled = false;
 static inline bool patch_loop = false;
-static inline size_t current = 0;
+static inline size_t &current = selected_patch;
 static inline size_t patches_count = 0;
 static inline float key_move_sensity = 0.5f;
 
@@ -730,6 +730,31 @@ static inline GLenum defaultDrawMode() {
   return wireframe ? GL_LINES : GL_TRIANGLES;
 }
 
+static inline float patch_far(const vector<patch_info> &patches) {
+  constexpr auto u32_max = numeric_limits<u32>::max();
+  u32 I1 = u32_max, I2 = 0, J1 = u32_max, J2 = 0, K1 = u32_max, K2 = 0;
+  for (const auto &patch : patches) {
+    I1 = min(patch.I1, I1);
+    I2 = max(patch.I2, I2);
+    J1 = min(patch.I1, J1);
+    J2 = max(patch.I1, J2);
+    K1 = min(patch.I1, K1);
+    K2 = max(patch.I1, K2);
+  }
+  float far = 100.;
+  if (patches.size() > 0) {
+    u32 I, J, K;
+    I = I2 - I1;
+    J = J2 - J1;
+    K = K2 - K1;
+    far = float(sqrt(I * I + J * J + K * K) * 5);
+  }
+  return far;
+}
+
+constexpr static inline float defaultNear = .01f;
+constexpr static inline float defaultFar = 2000.f;
+
 static inline int visualize_patch(const vector<patch_info> &patches) {
 
   patches_count = patches.size();
@@ -744,26 +769,7 @@ static inline int visualize_patch(const vector<patch_info> &patches) {
     visualize<GLuint>(
         [&patches]() { return from_patches<true>(patches, wireframe); },
         [&patches]() -> tuple<float, float> {
-          constexpr auto u32_max = numeric_limits<u32>::max();
-          u32 I1 = u32_max, I2 = 0, J1 = u32_max, J2 = 0, K1 = u32_max, K2 = 0;
-          for (const auto &patch : patches) {
-            I1 = min(patch.I1, I1);
-            I2 = max(patch.I2, I2);
-            J1 = min(patch.I1, J1);
-            J2 = max(patch.I1, J2);
-            K1 = min(patch.I1, K1);
-            K2 = max(patch.I1, K2);
-          }
-          float far = 100.;
-          if (patches.size() > 0) {
-            u32 I, J, K;
-            I = I2 - I1;
-            J = J2 - J1;
-            K = K2 - K1;
-            far = float(sqrt(I * I + J * J + K * K) * 5);
-          }
-
-          return {0.01f, far};
+          return {defaultNear, patch_far(patches)};
         },
         defaultDrawMode,
         {vertexShaderSource.head_pos_pv_color, vertexShaderSource.index,
@@ -784,7 +790,7 @@ static inline int visualize_frame(const vector<patch_info> &patches,
           return from_data(patches, frame);
         },
         [&patches]() constexpr->tuple<float, float> {
-          return {0.01f, 500.f};
+          return {defaultNear, patch_far(patches)};
         },
         []() { return GL_POINTS; },
         {vertexShaderSource.head_pos_pv_color, vertexShaderSource.temperature,
@@ -803,9 +809,9 @@ static inline int visualize_data(const vector<float> &data, u32 m, u32 n) {
     visualize<GLuint>(
         [&data, n]() { return from_matrix_data(data, n, wireframe); },
         [&data, m, n]() -> tuple<float, float> {
-          return {0.01f, 5 * max(initializer_list<float>{
-                                 *max_element(data.cbegin(), data.cend()),
-                                 (float)m, (float)n})};
+          return {defaultNear, 5 * max(initializer_list<float>{
+                                       *max_element(data.cbegin(), data.cend()),
+                                       (float)m, (float)n})};
         },
         defaultDrawMode,
         {vertexShaderSource.head_pos_pv_color, vertexShaderSource.main_begin,
@@ -829,11 +835,10 @@ static inline int visualize_3d_elements(const vector<float> &nodes,
 
     visualize<GLuint>(
         [&nodes, &vertex_count, &elements, sum, ratio]() {
-          return from_elements(nodes, vertex_count, elements, wireframe, sum,
-                               ratio);
+          return from_elements(nodes, vertex_count, elements, wireframe, sum);
         },
         [&nodes]() constexpr->tuple<float, float> {
-          return {0.01f, 500.f};
+          return {defaultNear, defaultFar};
         },
         defaultDrawMode,
         {vertexShaderSource.head_pos_pv_color, vertexShaderSource.main_begin,
@@ -861,7 +866,7 @@ static inline int visualize_patches_and_elements(
                                            patches, wireframe, sum, ratio);
         },
         [&nodes]() constexpr->tuple<float, float> {
-          return {0.01f, 500.f};
+          return {defaultNear, defaultFar};
         },
         defaultDrawMode,
         {vertexShaderSource.head_pos_pv_color, vertexShaderSource.main_begin,
@@ -889,9 +894,65 @@ static inline int visualize_nodes(const vector<float> &nodes,
           return make_tuple(make_tuple(_nodes), indices);
         },
         [&nodes]() constexpr->tuple<float, float> {
-          return {0.01f, 500.f};
+          return {defaultNear, defaultFar};
         },
         []() { return GL_POINTS; },
+        {vertexShaderSource.head_pos_pv_color, vertexShaderSource.main_begin,
+         vertexShaderSource.main_color, vertexShaderSource.main_end},
+        {fragmentShaderSource}, type_list<float[3]>{});
+  }
+}
+
+static inline int visualize_primitives(const vector<float> &nodes,
+                                       const vector<u32> &primitive) {
+  float _max =
+      max(initializer_list<float>{*max_element(nodes.cbegin(), nodes.cend())});
+  float ratio = _max == 0 ? 1 : 100 / _max;
+
+  while (true) {
+    if (!visualization_settings())
+      return 0;
+
+    visualize<GLuint>(
+        [&nodes, &primitive, ratio ]() -> auto{
+          auto _nodes = nodes;
+          for (auto &n : _nodes)
+            n *= ratio;
+          return make_tuple(make_tuple(_nodes), primitive);
+        },
+        [&nodes]() constexpr->tuple<float, float> {
+          return {defaultNear, defaultFar};
+        },
+        defaultDrawMode,
+        {vertexShaderSource.head_pos_pv_color, vertexShaderSource.main_begin,
+         vertexShaderSource.main_color, vertexShaderSource.main_end},
+        {fragmentShaderSource}, type_list<float[3]>{});
+  }
+}
+[[deprecated]] static inline int visualize_primitives_on_boundary(
+    const vector<patch_info> &patches, const vector<float> &nodes,
+    const vector<u32> &vertex_count, const vector<u32> &primitive) {
+  float _max =
+      max(initializer_list<float>{*max_element(nodes.cbegin(), nodes.cend())});
+  float ratio = _max == 0 ? 1 : 100 / _max;
+
+  while (true) {
+    if (!visualization_settings())
+      return 0;
+
+    visualize<GLuint>(
+        [&nodes, &patches, &vertex_count, &primitive, ratio ]() -> auto{
+          auto indices =
+              primitive_on_boundary(patches, nodes, primitive, wireframe);
+          auto _nodes = nodes;
+          for (auto &n : _nodes)
+            n *= ratio;
+          return make_tuple(make_tuple(_nodes), indices);
+        },
+        [&nodes]() constexpr->tuple<float, float> {
+          return {defaultNear, defaultFar};
+        },
+        defaultDrawMode,
         {vertexShaderSource.head_pos_pv_color, vertexShaderSource.main_begin,
          vertexShaderSource.main_color, vertexShaderSource.main_end},
         {fragmentShaderSource}, type_list<float[3]>{});
@@ -901,60 +962,8 @@ static inline int visualize_nodes(const vector<float> &nodes,
 static inline int visualize_polygons(const vector<float> &nodes,
                                      const vector<u32> &polygon_sizes,
                                      const vector<u32> &polygon_indices) {
-  float _max =
-      max(initializer_list<float>{*max_element(nodes.cbegin(), nodes.cend())});
-  float ratio = _max == 0 ? 1 : 100 / _max;
-
-  while (true) {
-    if (!visualization_settings())
-      return 0;
-
-    visualize<GLuint>(
-        [&nodes, &polygon_sizes, &polygon_indices, ratio ]() -> auto{
-          return make_tuple(
-              make_tuple(nodes),
-              from_polygons(polygon_sizes, polygon_indices, wireframe));
-        },
-        [&nodes]() constexpr->tuple<float, float> {
-          return {0.01f, 500.f};
-        },
-        defaultDrawMode,
-        {vertexShaderSource.head_pos_pv_color, vertexShaderSource.main_begin,
-         vertexShaderSource.main_color, vertexShaderSource.main_end},
-        {fragmentShaderSource}, type_list<float[3]>{});
-  }
-}
-
-static inline int visualize_primitives_on_patch(
-    const vector<patch_info> &patches, const vector<float> &nodes,
-    const vector<u32> &vertex_count, const vector<u32> &elements) {
-  u32 sum = accumulate(vertex_count.cbegin(), vertex_count.cend(), 0);
-  assert(elements.size() == sum);
-  float _max =
-      max(initializer_list<float>{*max_element(nodes.cbegin(), nodes.cend())});
-  float ratio = _max == 0 ? 1 : 100 / _max;
-
-  while (true) {
-    if (!visualization_settings())
-      return 0;
-
-    visualize<GLuint>(
-        [&nodes, &patches, &vertex_count, &elements, sum, ratio ]() -> auto{
-          auto indices =
-              primitive_on_boundary(patches, nodes, elements, wireframe);
-          auto _nodes = nodes;
-          for (auto &n : _nodes)
-            n *= ratio;
-          return make_tuple(make_tuple(_nodes), indices);
-        },
-        [&nodes]() constexpr->tuple<float, float> {
-          return {0.01f, 500.f};
-        },
-        defaultDrawMode,
-        {vertexShaderSource.head_pos_pv_color, vertexShaderSource.main_begin,
-         vertexShaderSource.main_color, vertexShaderSource.main_end},
-        {fragmentShaderSource}, type_list<float[3]>{});
-  }
+  return visualize_primitives(
+      nodes, from_polygons(polygon_sizes, polygon_indices, wireframe));
 }
 
 #endif // GRAPHICS_ENABLED

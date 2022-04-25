@@ -24,6 +24,7 @@ using std::set;
 using std::setprecision;
 using std::stringstream;
 using std::tuple;
+using std::filesystem::create_directory;
 using std::filesystem::exists;
 
 static inline u16 default_precision = 0;
@@ -242,8 +243,6 @@ static inline vector<float> sample(const vector<float> &data,
   return new_result;
 }
 
-static size_t selected_patch = -1;
-
 static inline void select_patch(const vector<patch_info> &patches) {
   u32 p = 0;
   cout << "Select a patch to analyze. Input an invalid index to discard."
@@ -297,6 +296,9 @@ s - Select a patch.)";
 
     if (!patches.empty() && elem_avail())
       cout << R"(
+y - Visualize polygons on current patch.
+n - Visualize nodes on current patch.
+r - Visualize elements primitives on current patch.
 Y - Visualize polygons on boundary.
 N - Visualize nodes on boundary.
 R - Visualize elements primitives on boundary.)";
@@ -360,6 +362,37 @@ d - Discard.
       for (; begin != end; ++begin)
         cout << '*' << *begin;
     } break;
+    case 'y':
+      if (selected_patch < patches.size() && elem_avail()) {
+        auto [polygon_sizes, polygon_indices] =
+            get_polygon(element_sizes, element_indices);
+        auto [sizes_of_polygon_vertices_on_boundary,
+              indices_of_polygon_vertices_on_boundary] =
+            polygon_on_boundary({patches[selected_patch]}, nodes, polygon_sizes,
+                                polygon_indices);
+
+        visualize_polygons(nodes, sizes_of_polygon_vertices_on_boundary,
+                           indices_of_polygon_vertices_on_boundary);
+      }
+      break;
+    case 'n':
+      if (selected_patch < patches.size() && elem_avail()) {
+        auto indices_of_node_on_boundary =
+            node_on_boundary({patches[selected_patch]}, nodes);
+
+        visualize_nodes(nodes, vector<u32>(indices_of_node_on_boundary.begin(),
+                                           indices_of_node_on_boundary.end()));
+      }
+      break;
+    case 'r':
+      if (selected_patch < patches.size() && elem_avail()) {
+        auto primitive_indices =
+            get_primitives(nodes, element_sizes, element_indices, wireframe);
+        auto primitive_indices_on_boundary = primitive_on_boundary(
+            {patches[selected_patch]}, nodes, primitive_indices, wireframe);
+        visualize_primitives(nodes, primitive_indices_on_boundary);
+      }
+      break;
     case 'Y':
       if (!patches.empty() && elem_avail()) {
         auto [polygon_sizes, polygon_indices] =
@@ -382,8 +415,11 @@ d - Discard.
       break;
     case 'R':
       if (!patches.empty() && elem_avail()) {
-        visualize_primitives_on_patch(patches, nodes, element_sizes,
-                                      element_indices);
+        auto primitive_indices =
+            get_primitives(nodes, element_sizes, element_indices, wireframe);
+        auto primitive_indices_on_boundary =
+            primitive_on_boundary(patches, nodes, primitive_indices, wireframe);
+        visualize_primitives(nodes, primitive_indices_on_boundary);
       }
       break;
     case 'p': {
@@ -399,11 +435,24 @@ d - Discard.
       set_default_precision(precision);
     } break;
     case 'l': {
-      auto opt = request_file_by_name([](const path &p) { return true; },
-                                      "APDL writable");
-      auto out = ofstream(opt.value());
+      auto opt1 = request_file_by_name([](const path &p) { return true; },
+                                       "APDL output");
+      auto opt2 = request_file_by_name([](const path &p) { return true; },
+                                       "APDL output directory");
+      if (!opt1)
+        break;
+      auto out = ofstream(opt1.value());
       if (!out) {
         cout << "Open Failed." << endl;
+      }
+      if (!opt2)
+        break;
+      auto dir = opt2.value();
+      if (!exists(dir)) {
+        auto suc = create_directory(dir);
+        if (!suc) {
+          cout << "Create Failed." << endl;
+        }
       }
       out << "/PREP7" << endl;
 
@@ -424,12 +473,13 @@ d - Discard.
       for (auto sz : on_boundary_polygon_sizes) {
         assert(p < e);
         assert(P < E);
-        write_table(out, "HFLUX", i, vector<u32>(p, p + sz), frames,
-                    vector<float>(P, P + N));
+        write_table(out, opt2.value(), "HFLUX", i, vector<u32>(p, p + sz),
+                    frames, vector<float>(P, P + N));
         ++i;
         p += sz;
         P += N;
       }
+      out << "FINISH" << endl << "/SOLU" << endl;
     } break;
     case 'S': {
       size_t dimension = -1;

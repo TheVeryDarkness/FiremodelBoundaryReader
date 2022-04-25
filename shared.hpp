@@ -17,7 +17,7 @@ from_patches_and_elements(const vector<float> &nodes,
   auto [_, i1] = from_patches<false>(patches, wireframe);
   auto &[p1, __] = _;
   auto [___, i2] =
-      from_elements(nodes, vertex_count, elements, wireframe, sum, ratio);
+      from_elements(nodes, vertex_count, elements, wireframe, ratio);
   auto &[p2] = ___;
 
   p2.reserve(p1.size() + p2.size());
@@ -233,10 +233,9 @@ node_on_each_patch_boundary(const vector<patch_info> &patches,
   return res;
 }
 
-static inline vector<u32>
-primitive_on_boundary(const vector<patch_info> &patches,
-                      const vector<float> &nodes, const vector<u32> &elements,
-                      const bool wireframe) {
+static inline vector<u32> primitive_on_boundary(
+    const vector<patch_info> &patches, const vector<float> &nodes,
+    const vector<u32> &primitive_indices, const bool wireframe) {
   assert(nodes.size() % 3 == 0);
   assert(!nodes.empty());
   assert(!patches.empty());
@@ -246,9 +245,11 @@ primitive_on_boundary(const vector<patch_info> &patches,
 
   constexpr float r = .01f;
 
+  // Loop for nodes on each boundary
   for (const auto &set : _nodes) {
     if (wireframe)
-      for (auto p = elements.begin(), end = elements.end(); p != end;) {
+      for (auto p = primitive_indices.begin(), end = primitive_indices.end();
+           p != end;) {
         u32 i0 = *p++;
         u32 i1 = *p++;
         assert(i0 < nodes.size());
@@ -260,7 +261,8 @@ primitive_on_boundary(const vector<patch_info> &patches,
         }
       }
     else
-      for (auto p = elements.begin(), end = elements.end(); p != end;) {
+      for (auto p = primitive_indices.begin(), end = primitive_indices.end();
+           p != end;) {
         u32 i0 = *p++;
         u32 i1 = *p++;
         u32 i2 = *p++;
@@ -352,19 +354,28 @@ mesh_coordinates(const vector<float> &vec, const vector<u32> &indices) {
   return res;
 }
 
-template <size_t dim>
+template <size_t dim1, size_t dim2>
 static inline void find(const u32 i1, const u32 i2, const u32 j1, const u32 j2,
                         const vector<frame> &frames, u32 i_patch,
                         const patch_info &patch, const vector<u32> &I,
                         const vector<u32> &J, vector<float> &sum, u32 &count) {
-  for (u32 i = i1; i <= i2; ++i) {
-    for (u32 j = j1; j <= j2; ++j) {
-      if (inside(I, J, i, j))
+  assert(count == 0);
+  auto [I1, I2] = patch.border<dim1>();
+  auto [J1, J2] = patch.border<dim2>();
+  auto imin = max(I1, i1);
+  auto imax = min(I2, i2);
+  auto jmin = max(J1, j1);
+  auto jmax = min(J2, j2);
+  for (u32 i = imin; i <= imax; ++i) {
+    for (u32 j = jmin; j <= jmax; ++j) {
+      if (inside(I, J, i, j)) {
         for (size_t index = 0; index < frames.size(); ++index) {
-          sum[index] +=
-              frames[index].data[i_patch].data[i + patch.length<dim>() * j];
-          count += 1;
+          sum[index] += frames[index]
+                            .data[i_patch]
+                            .data[i - I1 + patch.length<dim1>() * (j - J1)];
         }
+        count += 1;
+      }
     }
   }
 }
@@ -377,8 +388,10 @@ polygon_average(const vector<patch_info> &patches, const vector<float> &nodes,
   assert(nodes.size() % 3 == 0);
   assert(!nodes.empty());
   assert(!patches.empty());
-  auto sum = accumulate(polygon_sizes.begin(), polygon_sizes.end(), 0);
-  assert(sum == polygon_indices.size());
+  size_t none = 0;
+  auto polygon_indices_count =
+      accumulate(polygon_sizes.begin(), polygon_sizes.end(), 0);
+  assert(polygon_indices_count == polygon_indices.size());
   tuple<vector<u32>, vector<u32>, vector<float>> res;
   auto &[sizes, indices, data] = res;
 
@@ -386,7 +399,11 @@ polygon_average(const vector<patch_info> &patches, const vector<float> &nodes,
 
   constexpr float r = .01f;
 
-  auto &polygon_map = get_element_polygons();
+  data.reserve(frames.size() * polygon_indices.size());
+
+  // Take variables outside.
+  vector<float> sum;
+  vector<u32> polygon_vertex_indices;
 
   size_t i_patch = 0;
   for (const auto &set : _nodes) {
@@ -395,7 +412,8 @@ polygon_average(const vector<patch_info> &patches, const vector<float> &nodes,
     auto e = polygon_indices.end();
     for (auto sz : polygon_sizes) {
       assert(p < e);
-      vector<u32> polygon_vertex_indices = {p, p + sz};
+      polygon_vertex_indices.clear();
+      polygon_vertex_indices.insert(polygon_vertex_indices.end(), p, p + sz);
 
       bool in = true;
       for (auto index : polygon_vertex_indices) {
@@ -408,7 +426,7 @@ polygon_average(const vector<patch_info> &patches, const vector<float> &nodes,
           indices.push_back(i);
         sizes.push_back(sz);
 
-        const auto [I, J, K] = mesh_coordinates(nodes, indices);
+        const auto [I, J, K] = mesh_coordinates(nodes, polygon_vertex_indices);
         const auto [_i1, _i2] = minmax_element(I.cbegin(), I.cend());
         const auto [_j1, _j2] = minmax_element(J.cbegin(), J.cend());
         const auto [_k1, _k2] = minmax_element(K.cbegin(), K.cend());
@@ -419,35 +437,22 @@ polygon_average(const vector<patch_info> &patches, const vector<float> &nodes,
         auto k1 = *_k1;
         auto k2 = *_k2;
 
-        vector<float> sum(frames.size(), 0.f);
+        sum.clear();
+        sum.resize(frames.size(), 0.f);
         u32 count = 0;
 
         switch (patches[i_patch].IOR) {
-#define CASE(ior, i1, i2, I1, I2)                                              \
-  case ior:                                                                    \
-  case -ior: {                                                                 \
-    for (u32 i1 = i1##1; i1 <= i1##2; ++i1) {                                  \
-      for (u32 i2 = i2##1; i2 <= i2##2; ++i2) {                                \
-        if (inside(I1, I2, i1, i2))                                            \
-          for (size_t index = 0; index < frames.size(); ++index) {             \
-            sum[index] +=                                                      \
-                frames[index].data[i_patch].data[i1 + patch.I1() * i2];        \
-            count += 1;                                                        \
-          }                                                                    \
-      }                                                                        \
-    }                                                                          \
-  } break;
         case 1:
         case -1:
-          find<1>(j1, j2, k1, k2, frames, i_patch, patch, J, K, sum, count);
+          find<1, 2>(j1, j2, k1, k2, frames, i_patch, patch, J, K, sum, count);
           break;
         case 2:
         case -2:
-          find<0>(i1, i2, k1, k2, frames, i_patch, patch, I, K, sum, count);
+          find<0, 2>(i1, i2, k1, k2, frames, i_patch, patch, I, K, sum, count);
           break;
         case 3:
         case -3:
-          find<0>(i1, i2, j1, j2, frames, i_patch, patch, I, J, sum, count);
+          find<0, 1>(i1, i2, j1, j2, frames, i_patch, patch, I, J, sum, count);
           break;
         default:
           assert(false);
@@ -457,7 +462,8 @@ polygon_average(const vector<patch_info> &patches, const vector<float> &nodes,
         if (count > 0) {
           for (auto &s : sum)
             s /= count;
-        }
+        } else
+          ++none;
 
         data.insert(data.end(), sum.cbegin(), sum.cend());
       }
@@ -467,5 +473,10 @@ polygon_average(const vector<patch_info> &patches, const vector<float> &nodes,
 
     ++i_patch;
   }
+  data.shrink_to_fit();
+  if (none)
+    cerr << none
+         << " elements are on boundary but too small to contain a data point."
+         << endl;
   return res;
 }
