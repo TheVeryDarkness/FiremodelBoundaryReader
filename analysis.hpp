@@ -307,7 +307,7 @@ R - Visualize elements primitives on boundary.)";
       cout << R"(
 l - Write APDL output.)";
 
-    if (!frames.empty())
+    if (!frames.empty() && selected_patch < patches.size())
       cout <<
           R"(
 t - Copy patch data in a frame as current result.
@@ -315,7 +315,7 @@ T - Copy data in all frames of this patch as current result.)";
 
 #if GRAPHICS_ENABLED
     if (!data.empty())
-      cout << R"("
+      cout << R"(
 v - Visualize current result.)";
 #endif // GRAPHICS_ENABLED
 

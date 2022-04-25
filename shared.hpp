@@ -62,17 +62,17 @@ from_matrix_data(const vector<float> &data, u32 n, bool wireframe) {
         // 2 1
         indices.push_back(i * n + j);
         indices.push_back((i - 1) * n + j);
-      } else {
-        //   2
-        // 3 1
+      } else if (j != 0) {
+        //   1
+        // 2 3
         indices.push_back(i * n + j);
-        indices.push_back(i * n + j + 1);
-        indices.push_back((i - 1) * n + j);
+        indices.push_back((i - 1) * n + j - 1);
+        indices.push_back(i * n + j - 1);
         // 2 1
         // 3
-        indices.push_back(i * n + j + 1);
-        indices.push_back((i - 1) * n + j + 1);
+        indices.push_back(i * n + j);
         indices.push_back((i - 1) * n + j);
+        indices.push_back((i - 1) * n + j - 1);
       }
     }
 
