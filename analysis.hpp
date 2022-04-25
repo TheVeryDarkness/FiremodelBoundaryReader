@@ -479,7 +479,7 @@ d - Discard.
         p += sz;
         P += N;
       }
-      out << "FINISH" << endl << "/SOLU" << endl;
+      out << "FINISH" << endl << "/SOLU" << endl << "ALLSEL,ALL" << endl;
     } break;
     case 'S': {
       size_t dimension = -1;
