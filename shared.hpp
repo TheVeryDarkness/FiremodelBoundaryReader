@@ -93,6 +93,8 @@ static inline bool in_box(float x, float y, float z, float x1, float x2,
   return x1 <= x && x <= x2 && y1 <= y && y <= y2 && z1 <= z && z <= z2;
 }
 
+static const float tolerance = .01f;
+
 static inline set<u32> node_on_boundary(const vector<patch_info> &patches,
                                         const vector<float> &nodes) {
   assert(nodes.size() % 3 == 0);
@@ -139,18 +141,23 @@ static inline set<u32> node_on_boundary(const vector<patch_info> &patches,
   cout << "Meshes: [" << Xmin << ", " << Xmax << "]*[" << Ymin << ", " << Ymax
        << "]*[" << Zmin << ", " << Zmax << "]" << endl;
 
-  constexpr float r = .01f;
   for (auto p = nodes.begin(), end = nodes.end(); p != end;) {
     float x = *p++;
     float y = *p++;
     float z = *p++;
     for (const auto &patch : patches) {
-      float x1 = mesh.x0 + patch.I1 * mesh.cell_size - mesh.cell_size * r;
-      float x2 = mesh.x0 + patch.I2 * mesh.cell_size + mesh.cell_size * r;
-      float y1 = mesh.y0 + patch.J1 * mesh.cell_size - mesh.cell_size * r;
-      float y2 = mesh.y0 + patch.J2 * mesh.cell_size + mesh.cell_size * r;
-      float z1 = mesh.z0 + patch.K1 * mesh.cell_size - mesh.cell_size * r;
-      float z2 = mesh.z0 + patch.K2 * mesh.cell_size + mesh.cell_size * r;
+      float x1 =
+          mesh.x0 + patch.I1 * mesh.cell_size - mesh.cell_size * tolerance;
+      float x2 =
+          mesh.x0 + patch.I2 * mesh.cell_size + mesh.cell_size * tolerance;
+      float y1 =
+          mesh.y0 + patch.J1 * mesh.cell_size - mesh.cell_size * tolerance;
+      float y2 =
+          mesh.y0 + patch.J2 * mesh.cell_size + mesh.cell_size * tolerance;
+      float z1 =
+          mesh.z0 + patch.K1 * mesh.cell_size - mesh.cell_size * tolerance;
+      float z2 =
+          mesh.z0 + patch.K2 * mesh.cell_size + mesh.cell_size * tolerance;
 
       if (in_box(x, y, z, x1, x2, y1, y2, z1, z2)) {
         res.insert(i);
@@ -210,19 +217,24 @@ node_on_each_patch_boundary(const vector<patch_info> &patches,
   cout << "Meshes: [" << Xmin << ", " << Xmax << "]*[" << Ymin << ", " << Ymax
        << "]*[" << Zmin << ", " << Zmax << "]" << endl;
 
-  constexpr float r = .01f;
   for (auto p = nodes.begin(), end = nodes.end(); p != end;) {
     float x = *p++;
     float y = *p++;
     float z = *p++;
     size_t i_patch = 0;
     for (const auto &patch : patches) {
-      float x1 = mesh.x0 + patch.I1 * mesh.cell_size - mesh.cell_size * r;
-      float x2 = mesh.x0 + patch.I2 * mesh.cell_size + mesh.cell_size * r;
-      float y1 = mesh.y0 + patch.J1 * mesh.cell_size - mesh.cell_size * r;
-      float y2 = mesh.y0 + patch.J2 * mesh.cell_size + mesh.cell_size * r;
-      float z1 = mesh.z0 + patch.K1 * mesh.cell_size - mesh.cell_size * r;
-      float z2 = mesh.z0 + patch.K2 * mesh.cell_size + mesh.cell_size * r;
+      float x1 =
+          mesh.x0 + patch.I1 * mesh.cell_size - mesh.cell_size * tolerance;
+      float x2 =
+          mesh.x0 + patch.I2 * mesh.cell_size + mesh.cell_size * tolerance;
+      float y1 =
+          mesh.y0 + patch.J1 * mesh.cell_size - mesh.cell_size * tolerance;
+      float y2 =
+          mesh.y0 + patch.J2 * mesh.cell_size + mesh.cell_size * tolerance;
+      float z1 =
+          mesh.z0 + patch.K1 * mesh.cell_size - mesh.cell_size * tolerance;
+      float z2 =
+          mesh.z0 + patch.K2 * mesh.cell_size + mesh.cell_size * tolerance;
 
       if (in_box(x, y, z, x1, x2, y1, y2, z1, z2)) {
         res[i_patch].insert(i);
@@ -244,8 +256,6 @@ static inline vector<u32> primitive_on_boundary(
   vector<u32> res;
 
   auto _nodes = node_on_each_patch_boundary(patches, nodes);
-
-  constexpr float r = .01f;
 
   // Loop for nodes on each boundary
   for (const auto &set : _nodes) {
@@ -295,9 +305,6 @@ static inline tuple<vector<u32>, vector<u32>> polygon_on_boundary(
 
   auto _nodes = node_on_each_patch_boundary(patches, nodes);
 
-  constexpr float r = .01f;
-
-  auto &polygon_map = get_element_polygons();
   vector<u32> polygon_vertex_indices;
 
   for (const auto &set : _nodes) {
@@ -415,7 +422,7 @@ polygon_average(const vector<patch_info> &patches, const vector<float> &nodes,
 
   constexpr float r = .01f;
 
-  data.reserve(frames.size() * polygon_indices.size());
+  // data.reserve(frames.size() * polygon_indices.size());
 
   // Take variables outside.
   vector<float> sum;
@@ -489,7 +496,7 @@ polygon_average(const vector<patch_info> &patches, const vector<float> &nodes,
 
     ++i_patch;
   }
-  data.shrink_to_fit();
+  // data.shrink_to_fit();
   if (none)
     cerr << none
          << " elements are on boundary but too small to contain a data point."

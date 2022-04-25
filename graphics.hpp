@@ -805,7 +805,6 @@ constexpr static inline float defaultNear = .01f;
 constexpr static inline float defaultFar = 1000.f;
 
 static inline int visualize_patch(const vector<patch_info> &patches) {
-
   patches_count = patches.size();
   if (current > patches.size()) {
     current = 0;
@@ -887,8 +886,7 @@ static inline int visualize_3d_elements(const vector<float> &nodes,
                                         const vector<u32> &elements) {
   u32 sum = accumulate(vertex_count.cbegin(), vertex_count.cend(), 0);
   assert(elements.size() == sum);
-  float _max =
-      max(initializer_list<float>{*max_element(nodes.cbegin(), nodes.cend())});
+  float _max = *max_element(nodes.cbegin(), nodes.cend());
   float ratio = _max == 0 ? 1 : 100 / _max;
 
   while (true) {
@@ -939,8 +937,7 @@ static inline int visualize_patches_and_elements(
 
 static inline int visualize_nodes(const vector<float> &nodes,
                                   const vector<u32> &indices) {
-  float _max =
-      max(initializer_list<float>{*max_element(nodes.cbegin(), nodes.cend())});
+  float _max = *max_element(nodes.cbegin(), nodes.cend());
   float ratio = _max == 0 ? 1 : 100 / _max;
 
   while (true) {
@@ -967,8 +964,7 @@ static inline int visualize_nodes(const vector<float> &nodes,
 
 static inline int visualize_primitives(const vector<float> &nodes,
                                        const vector<u32> &primitive) {
-  float _max =
-      max(initializer_list<float>{*max_element(nodes.cbegin(), nodes.cend())});
+  float _max = *max_element(nodes.cbegin(), nodes.cend());
   float ratio = _max == 0 ? 1 : 100 / _max;
 
   while (true) {
@@ -994,8 +990,7 @@ static inline int visualize_primitives(const vector<float> &nodes,
 [[deprecated]] static inline int visualize_primitives_on_boundary(
     const vector<patch_info> &patches, const vector<float> &nodes,
     const vector<u32> &vertex_count, const vector<u32> &primitive) {
-  float _max =
-      max(initializer_list<float>{*max_element(nodes.cbegin(), nodes.cend())});
+  float _max = *max_element(nodes.cbegin(), nodes.cend());
   float ratio = _max == 0 ? 1 : 100 / _max;
 
   while (true) {

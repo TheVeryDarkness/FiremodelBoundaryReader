@@ -397,9 +397,6 @@ FodyWeavers.xsd
 # JetBrains Rider
 *.sln.iml
 
-# Test data
-test/*
-
 # CMake
 cmakePresets.json 
 cmakeUserPresets.json 
