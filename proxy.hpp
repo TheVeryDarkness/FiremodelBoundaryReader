@@ -4,7 +4,7 @@
 
 using std::string;
 
-class stdin_proxy {
+static class stdin_proxy {
   std::stringstream sin;
   bool string_empty() {
     auto pos = sin.tellg();
