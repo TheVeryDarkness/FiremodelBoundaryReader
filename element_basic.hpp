@@ -241,11 +241,11 @@ static inline vector<u32> get_primitives(const vector<float> &nodes,
   return indices;
 }
 
-static inline tuple<tuple<vector<float>>, vector<GLuint>>
+static inline tuple<tuple<vector<float>>, vector<u32>>
 from_elements(const vector<float> &nodes, const vector<u32> &vertex_count,
               const vector<u32> &elements, const bool wireframe,
               const float ratio) {
-  tuple<tuple<vector<float>>, vector<GLuint>> res;
+  tuple<tuple<vector<float>>, vector<u32>> res;
   auto &[vertices, indices] = res;
   auto &[position] = vertices;
   position = nodes;

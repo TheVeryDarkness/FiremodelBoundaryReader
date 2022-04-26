@@ -41,9 +41,9 @@ from_patches_and_elements(const vector<float> &nodes,
   return make_tuple(make_tuple(std::move(p2)), std::move(i2));
 }
 
-static inline tuple<tuple<vector<float>>, vector<GLuint>>
+static inline tuple<tuple<vector<float>>, vector<u32>>
 from_matrix_data(const vector<float> &data, u32 n, bool wireframe) {
-  tuple<tuple<vector<float>>, vector<GLuint>> res;
+  tuple<tuple<vector<float>>, vector<u32>> res;
   auto &[vertices, indices] = res;
   auto &[position] = vertices;
 

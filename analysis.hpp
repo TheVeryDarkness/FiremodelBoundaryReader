@@ -294,6 +294,7 @@ C - Save current result as CSV file.)";
       cout << R"(
 s - Select a patch.)";
 
+#if GRAPHICS_ENABLED
     if (!patches.empty() && elem_avail())
       cout << R"(
 y - Visualize polygons on current patch.
@@ -302,6 +303,7 @@ r - Visualize elements primitives on current patch.
 Y - Visualize polygons on boundary.
 N - Visualize nodes on boundary.
 R - Visualize elements primitives on boundary.)";
+#endif // GRAPHICS_ENABLED
 
     if (!patches.empty() && !frames.empty() && elem_avail())
       cout << R"(
@@ -362,6 +364,7 @@ d - Discard.
       for (; begin != end; ++begin)
         cout << '*' << *begin;
     } break;
+#if GRAPHICS_ENABLED
     case 'y':
       if (selected_patch < patches.size() && elem_avail()) {
         auto [polygon_sizes, polygon_indices] =
@@ -430,6 +433,7 @@ d - Discard.
       if (n != 0)
         print_patch(data, m, n);
     } break;
+#endif // GRAPHICS_ENABLED
     case 'P': {
       u16 precision = input_precision();
       set_default_precision(precision);
