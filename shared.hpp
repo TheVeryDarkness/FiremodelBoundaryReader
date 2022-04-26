@@ -4,6 +4,7 @@
 #include "fds_basic.hpp"
 #include <cassert>
 
+using std::all_of;
 using std::int_fast64_t;
 using std::make_tuple;
 using std::minmax_element;
@@ -417,6 +418,11 @@ static inline void find(const u32 i1, const u32 i2, const u32 j1, const u32 j2,
   }
 }
 
+template <typename Ty> static inline bool all_same(const vector<Ty> &vec) {
+  return all_of(vec.begin(), vec.end(),
+                [&vec](auto v) { return v == vec.front(); });
+}
+
 static inline tuple<vector<u32>, vector<u32>, vector<float>>
 polygon_average(const vector<patch_info> &patches, const vector<float> &nodes,
                 const vector<u32> &polygon_sizes,
@@ -426,6 +432,7 @@ polygon_average(const vector<patch_info> &patches, const vector<float> &nodes,
   assert(!nodes.empty());
   assert(!patches.empty());
   size_t none = 0;
+  size_t degenerated = 0;
   auto polygon_indices_count =
       accumulate(polygon_sizes.begin(), polygon_sizes.end(), 0);
   assert(polygon_indices_count == polygon_indices.size());
@@ -499,8 +506,12 @@ polygon_average(const vector<patch_info> &patches, const vector<float> &nodes,
         if (count > 0) {
           for (auto &s : sum)
             s /= count;
-        } else
-          ++none;
+        } else {
+          if (all_same(I) || all_same(J) || all_same(K))
+            ++degenerated;
+          else
+            ++none;
+        }
 
         data.insert(data.end(), sum.cbegin(), sum.cend());
       }
@@ -511,9 +522,11 @@ polygon_average(const vector<patch_info> &patches, const vector<float> &nodes,
     ++i_patch;
   }
   // data.shrink_to_fit();
+  if (degenerated)
+    clog << degenerated << " surfaces seem to be degenerated.\n";
   if (none)
     cerr << none
-         << " elements are on boundary but too small to contain a data point."
-         << endl;
+         << " non-degenerated surfaces on boundary don't contain data "
+            "point.\n";
   return res;
 }
