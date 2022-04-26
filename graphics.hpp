@@ -342,7 +342,7 @@ create_shader_program(initializer_list<const char *> vertexShaderSource,
 }
 
 static bool fullScreen = false;
-static bool wireframe = false;
+static bool wireframe = true;
 
 /// @retval Start visualization or discard.
 static inline bool visualization_settings() {
@@ -549,7 +549,8 @@ static inline int visualize(GetData &&getData, GetNearFar &&getNearFar,
   glDisable(GL_CULL_FACE);
   glDisable(GL_DEPTH_TEST);
   glEnable(GL_BLEND);
-  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+  glBlendFunc(GL_SRC_ALPHA, GL_DST_ALPHA);
+  glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
   DETECT_ERROR;
 
@@ -725,28 +726,28 @@ void main() {
  float ti = 2;
  float wave_length = 660 - 260 * (data - min) / (max - min);
  if (min == max) {
-  color = vec4(1, 1, 1, .8f);
+  color = vec4(1, 1, 1, .6f);
  } else {
   color = vec4(
    0.41 * pow(2, -pow(abs(wave_length - 595), ti) / rr),
    0.82 * pow(2, -pow(abs(wave_length - 530), ti) / rg),
    0.40 * pow(2, -pow(abs(wave_length - 460), ti) / rb),
-   .8f
+   .6f
   );
  }
 )";
   const char *main_position_as_color = R"(
- color = vec4(aPos.x / X, aPos.y / Y, aPos.z / Z, .8);
+ color = vec4(aPos.x / X, aPos.y / Y, aPos.z / Z, .8f);
 )";
   const char *main_highlight = R"(
  if (highlighted == data) {
-  color = vec4(.8f, .1f, .0f, .8f);
+  color = vec4(.8f, .1f, .0f, .6f);
  } else {
-  color = vec4(.6f, .6f, .6f, .4f);
+  color = vec4(.6f, .6f, .6f, .1f);
  }
 )";
   const char *main_default_color = R"(
-  color = vec4(.6f, .6f, .6f, .4f);
+  color = vec4(.6f, .6f, .6f, .1f);
 )";
   const char *main_end = R"(
 }
@@ -771,7 +772,7 @@ in vec4 color;
 
 void main() {
  gl_FragColor = color;
- gl_FragColor.a = gl_FragColor.a / (1 + gl_FragCoord.z);
+ // gl_FragColor.a = gl_FragColor.a / (1 + gl_FragCoord.z / gl_FragCoord.w);
 }
 )";
 
@@ -912,9 +913,11 @@ static inline int visualize_patches_and_elements(
     const vector<u32> &elements, const vector<patch_info> &patches) {
   u32 sum = accumulate(vertex_count.cbegin(), vertex_count.cend(), 0);
   assert(elements.size() == sum);
-  float _max =
+  const float _max1 = patch_far(patches);
+  const float _max2 =
       max(initializer_list<float>{*max_element(nodes.cbegin(), nodes.cend())});
-  float ratio = _max == 0 ? 1 : 100 / _max;
+  const float _max = max(_max1, _max2);
+  const float ratio = _max == 0 ? 1 : 100 / _max;
 
   while (true) {
     if (!visualization_settings())

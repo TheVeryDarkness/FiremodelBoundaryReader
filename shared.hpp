@@ -95,15 +95,8 @@ static inline bool in_box(float x, float y, float z, float x1, float x2,
 
 static const float tolerance = .01f;
 
-static inline set<u32> node_on_boundary(const vector<patch_info> &patches,
-                                        const vector<float> &nodes) {
-  assert(nodes.size() % 3 == 0);
-  assert(!nodes.empty());
-  assert(!patches.empty());
-  set<u32> res;
-
-  u32 i = 0;
-
+static inline void check_border(const vector<patch_info> &patches,
+                                const vector<float> &nodes) {
   float xmin = nodes[0], xmax = nodes[0], ymin = nodes[1], ymax = nodes[1],
         zmin = nodes[2], zmax = nodes[2];
   for (auto p = nodes.begin(), end = nodes.end(); p != end;) {
@@ -140,6 +133,18 @@ static inline set<u32> node_on_boundary(const vector<patch_info> &patches,
        << "]*[" << zmin << ", " << zmax << "]" << endl;
   cout << "Meshes: [" << Xmin << ", " << Xmax << "]*[" << Ymin << ", " << Ymax
        << "]*[" << Zmin << ", " << Zmax << "]" << endl;
+}
+
+static inline set<u32> node_on_boundary(const vector<patch_info> &patches,
+                                        const vector<float> &nodes) {
+  assert(nodes.size() % 3 == 0);
+  assert(!nodes.empty());
+  assert(!patches.empty());
+  set<u32> res;
+
+  check_border(patches, nodes);
+
+  u32 i = 0;
 
   for (auto p = nodes.begin(), end = nodes.end(); p != end;) {
     float x = *p++;
@@ -180,42 +185,7 @@ node_on_each_patch_boundary(const vector<patch_info> &patches,
 
   u32 i = 0;
 
-  float xmin = nodes[0], xmax = nodes[0], ymin = nodes[1], ymax = nodes[1],
-        zmin = nodes[2], zmax = nodes[2];
-  for (auto p = nodes.begin(), end = nodes.end(); p != end;) {
-    float x = *p++;
-    float y = *p++;
-    float z = *p++;
-    xmin = min(x, xmin);
-    xmax = max(x, xmax);
-    ymin = min(y, ymin);
-    ymax = max(y, ymax);
-    zmin = min(z, zmin);
-    zmax = max(z, zmax);
-  }
-  auto &f = patches.front();
-  u32 Imin = f.I1, Imax = f.I2, Jmin = f.J1, Jmax = f.J2, Kmin = f.K1,
-      Kmax = f.K2;
-  for (auto &p : patches) {
-    Imin = min(p.I1, Imin);
-    Imax = max(p.I2, Imax);
-    Jmin = min(p.J1, Jmin);
-    Jmax = max(p.J2, Jmax);
-    Kmin = min(p.K1, Kmin);
-    Kmax = max(p.K2, Kmax);
-  }
-
-  float Xmin = mesh.x0 + Imin * mesh.cell_size;
-  float Xmax = mesh.x0 + Imax * mesh.cell_size;
-  float Ymin = mesh.y0 + Jmin * mesh.cell_size;
-  float Ymax = mesh.y0 + Jmax * mesh.cell_size;
-  float Zmin = mesh.z0 + Kmin * mesh.cell_size;
-  float Zmax = mesh.z0 + Kmax * mesh.cell_size;
-
-  cout << "Nodes:  [" << xmin << ", " << xmax << "]*[" << ymin << ", " << ymax
-       << "]*[" << zmin << ", " << zmax << "]" << endl;
-  cout << "Meshes: [" << Xmin << ", " << Xmax << "]*[" << Ymin << ", " << Ymax
-       << "]*[" << Zmin << ", " << Zmax << "]" << endl;
+  check_border(patches, nodes);
 
   for (auto p = nodes.begin(), end = nodes.end(); p != end;) {
     float x = *p++;
@@ -238,11 +208,55 @@ node_on_each_patch_boundary(const vector<patch_info> &patches,
 
       if (in_box(x, y, z, x1, x2, y1, y2, z1, z2)) {
         res[i_patch].insert(i);
-        break;
       }
       ++i_patch;
     }
     ++i;
+  }
+  return res;
+}
+
+static inline vector<set<u32>>
+node_on_each_connected_patch_boundary(const vector<patch_info> &patches,
+                                      const vector<float> &nodes) {
+  assert(nodes.size() % 3 == 0);
+  assert(!nodes.empty());
+  assert(!patches.empty());
+  vector<set<u32>> res;
+  res.resize(patches.size());
+
+  check_border(patches, nodes);
+
+  auto domains_vec = merge(patches);
+
+  set<u32> current;
+  for (const auto &domains : domains_vec) {
+    for (const auto &domain : domains) {
+      float x1 =
+          mesh.x0 + domain.I1 * mesh.cell_size - mesh.cell_size * tolerance;
+      float x2 =
+          mesh.x0 + domain.I2 * mesh.cell_size + mesh.cell_size * tolerance;
+      float y1 =
+          mesh.y0 + domain.J1 * mesh.cell_size - mesh.cell_size * tolerance;
+      float y2 =
+          mesh.y0 + domain.J2 * mesh.cell_size + mesh.cell_size * tolerance;
+      float z1 =
+          mesh.z0 + domain.K1 * mesh.cell_size - mesh.cell_size * tolerance;
+      float z2 =
+          mesh.z0 + domain.K2 * mesh.cell_size + mesh.cell_size * tolerance;
+
+      u32 i = 0;
+      for (auto p = nodes.begin(), end = nodes.end(); p != end;) {
+        float x = *p++;
+        float y = *p++;
+        float z = *p++;
+        if (in_box(x, y, z, x1, x2, y1, y2, z1, z2)) {
+          current.insert(i);
+        }
+        ++i;
+      }
+    }
+    res.push_back(std::move(current));
   }
   return res;
 }
@@ -255,7 +269,7 @@ static inline vector<u32> primitive_on_boundary(
   assert(!patches.empty());
   vector<u32> res;
 
-  auto _nodes = node_on_each_patch_boundary(patches, nodes);
+  auto _nodes = node_on_each_connected_patch_boundary(patches, nodes);
 
   // Loop for nodes on each boundary
   for (const auto &set : _nodes) {
@@ -303,7 +317,7 @@ static inline tuple<vector<u32>, vector<u32>> polygon_on_boundary(
   tuple<vector<u32>, vector<u32>> res;
   auto &[sizes, indices] = res;
 
-  auto _nodes = node_on_each_patch_boundary(patches, nodes);
+  auto _nodes = node_on_each_connected_patch_boundary(patches, nodes);
 
   vector<u32> polygon_vertex_indices;
 

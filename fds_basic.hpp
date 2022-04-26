@@ -115,7 +115,7 @@ constexpr static inline bool compare(const array<char, 30 + 1> &a,
                                  b + len + 1) == 0;
 }
 
-static inline size_t selected_patch = numeric_limits<size_t>::max();
+static inline size_t selected_patch = 0;
 
 constexpr static inline data_category
 get_data_category(const array<char, 30 + 1> &units) {
@@ -278,5 +278,154 @@ from_data(const vector<patch_info> &patches, const frame &frame) {
   assert(position.size() == points * 3);
   assert(indices.size() == points);
 
+  return res;
+}
+
+struct patch_domain {
+  u32 I1;
+  u32 I2;
+  u32 J1;
+  u32 J2;
+  u32 K1;
+  u32 K2;
+  const i32 IOR;
+  constexpr static patch_domain from_patch(const patch_info &patch) {
+    return {patch.I1, patch.I2, patch.J1, patch.J2,
+            patch.K1, patch.K2, patch.IOR};
+  }
+
+  template <u32 i> constexpr tuple<u32, u32> border() const {
+    switch (i) {
+    case 0:
+      return {I2, I1};
+    case 1:
+      return {J2, J1};
+    case 2:
+      return {K2, K1};
+    default:
+      assert(false);
+      return {0, numeric_limits<u32>::max()};
+    }
+  }
+  template <u32 dim1, u32 dim2> constexpr bool easy_merge(const patch_info &p) {
+    auto [x1, x2] = border<dim1>();
+    auto [y1, y2] = border<dim2>();
+    auto [X1, X2] = p.border<dim1>();
+    auto [Y1, Y2] = p.border<dim2>();
+    if (x1 == X1 && x2 == X2) {
+      if (y1 == Y2) {
+        y1 = Y1;
+        return true;
+      }
+      if (y2 == Y1) {
+        y2 = Y2;
+        return true;
+      }
+    }
+    if (y1 == Y1 && y2 == Y2) {
+      if (x1 == X2) {
+        x1 = X1;
+        return true;
+      }
+      if (x2 == X1) {
+        x2 = X2;
+        return true;
+      }
+    }
+    return false;
+  }
+  constexpr bool merge(const patch_info &p) {
+    if (IOR != p.IOR)
+      return false;
+
+    switch (IOR) {
+    case 1:
+    case -1:
+      assert(I1 == I2);
+      if (p.I1 != I1)
+        return false;
+      return easy_merge<1, 2>(p);
+    case 2:
+    case -2:
+      assert(J1 == J2);
+      if (p.J1 != J1)
+        return false;
+      return easy_merge<0, 2>(p);
+    case 3:
+    case -3:
+      assert(K1 == K2);
+      if (p.K1 != K1)
+        return false;
+      return easy_merge<0, 1>(p);
+    default:
+      assert(false);
+      return false;
+    }
+  }
+
+  template <u32 dim1, u32 dim2>
+  constexpr bool easy_near(const patch_info &p) const {
+    auto [x1, x2] = border<dim1>();
+    auto [y1, y2] = border<dim2>();
+    auto [X1, X2] = p.border<dim1>();
+    auto [Y1, Y2] = p.border<dim2>();
+    if ((X1 <= x1 && x2 <= X2) || (x1 <= X1 && X2 <= x2))
+      if (y1 == Y2 || y2 == Y1)
+        return true;
+    if ((Y1 <= y1 && y2 <= Y2) || (y1 <= Y1 && Y2 <= y2))
+      if (x1 == X2 || x2 == X1)
+        return true;
+    return false;
+  }
+  constexpr bool near(const patch_info &p) const {
+    if (IOR != p.IOR)
+      return false;
+
+    switch (IOR) {
+    case 1:
+    case -1:
+      assert(I1 == I2);
+      if (p.I1 != I1)
+        return false;
+      return easy_near<1, 2>(p);
+    case 2:
+    case -2:
+      assert(J1 == J2);
+      if (p.J1 != J1)
+        return false;
+      return easy_near<0, 2>(p);
+    case 3:
+    case -3:
+      assert(K1 == K2);
+      if (p.K1 != K1)
+        return false;
+      return easy_near<0, 1>(p);
+    default:
+      assert(false);
+      return false;
+    }
+  }
+};
+
+static inline vector<vector<patch_domain>>
+merge(const vector<patch_info> &patches) {
+  vector<vector<patch_domain>> res;
+  for (auto &patch : patches) {
+    for (auto &domains : res) {
+      for (auto &domain : domains) {
+        if (domain.merge(patch)) {
+          goto NEXT;
+        }
+      }
+      for (auto &domain : domains) {
+        if (domain.near(patch)) {
+          domains.push_back(patch_domain::from_patch(patch));
+          goto NEXT;
+        }
+      }
+    }
+    res.push_back({patch_domain::from_patch(patch)});
+  NEXT:;
+  }
   return res;
 }

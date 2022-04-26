@@ -338,7 +338,8 @@ V - Visualize frame.)"
 
     if (elem_available())
       cout << R"(
-n - Visualize nodes.)";
+R - Visualize elements.
+Y - Visualize elements polygons.)";
 
     if (!patches.empty())
       cout << R"(
@@ -395,9 +396,16 @@ a - Analyze patch data.)";
         visualize_patches_and_elements(nodes, sizes, elems, patches);
       } else
         goto CMDNF;
-    case 'n':
+    case 'R':
       if (elem_available()) {
         visualize_3d_elements(nodes, sizes, elems);
+      } else
+        goto CMDNF;
+      break;
+    case 'Y':
+      if (elem_available()) {
+        auto [polygon_sizes, polygon_indices] = get_polygon(sizes, elems);
+        visualize_polygons(nodes, polygon_sizes, polygon_indices);
       } else
         goto CMDNF;
       break;
