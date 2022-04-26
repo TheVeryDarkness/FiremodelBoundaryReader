@@ -18,7 +18,8 @@ static inline const map<u32, tuple<u32, vector<u32>>> &get_element_polygons() {
                                 4, 5, 6, 7, //
                                 0, 1, 5, 4, //
                                 2, 3, 7, 6, //
-                                1, 2, 6, 5};
+                                1, 2, 6, 5, //
+                                3, 0, 4, 7};
     element_polygons.emplace(8, make_tuple(4, vector<u32>{l8}));
     //  0 11  3 10  2  9  1  8
     //  4 12  5 13  6 14  7 15
@@ -72,9 +73,12 @@ static inline const map<u32, vector<u32>> &get_element_triangles() {
     // 2 3 7 6
     // 1 2 6 5
     // 3 0 4 7
-    element_frames.emplace(8, vector<u32>{0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7,
-                                          0, 1, 5, 0, 5, 4, 2, 3, 7, 2, 7, 6,
-                                          1, 2, 6, 1, 6, 5, 3, 0, 4, 3, 4, 7});
+    element_frames.emplace(8, vector<u32>{0, 1, 2, 0, 2, 3, //
+                                          4, 5, 6, 4, 6, 7, //
+                                          0, 1, 5, 0, 5, 4, //
+                                          2, 3, 7, 2, 7, 6, //
+                                          1, 2, 6, 1, 6, 5, //
+                                          3, 0, 4, 3, 4, 7});
     //  0  8  1  9  2 10  3 11
     //  4 12  5 13  6 14  7 15
     //  0  8  1 17  5 12  4 16
