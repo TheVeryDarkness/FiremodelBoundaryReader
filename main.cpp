@@ -323,7 +323,7 @@ S - Execute a script.
 a - Analyze.
 u - Unload file.)";
     if (label.front() && bar_label.front() && units.front())
-      R"(
+      cout << R"(
 b - Show boundary quantity basic information.)";
 
     if (!frames.empty())
@@ -391,6 +391,7 @@ a - Analyze patch data.)";
       }
       data = read_file_with_mode(fin);
     } break;
+#if GRAPHICS_ENABLED
     case 'N':
       if (!patches.empty() && elem_available()) {
         visualize_patches_and_elements(nodes, sizes, elems, patches);
@@ -409,6 +410,7 @@ a - Analyze patch data.)";
       } else
         goto CMDNF;
       break;
+#endif // GRAPHICS_ENABLED
     case 'b': {
       print_header(cout, label, bar_label, units);
     } break;
