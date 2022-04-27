@@ -1,5 +1,6 @@
 #pragma once
 #include "types.hpp"
+#include <algorithm>
 #include <array>
 #include <cassert>
 #include <tuple>
@@ -7,6 +8,9 @@
 using std::array;
 using std::conditional_t;
 using std::lexicographical_compare;
+using std::max;
+using std::min;
+using std::minmax_element;
 using std::numeric_limits;
 using std::tuple;
 
@@ -244,6 +248,15 @@ from_patches(const vector<patch_info> &patches, bool wireframe) {
   return res;
 }
 
+static inline vector<float> from_frame(const frame &frame, u32 size) {
+  vector<float> res;
+  res.reserve(size);
+
+  for (auto &p : frame.data)
+    res.insert(res.cend(), p.data.cbegin(), p.data.cend());
+  return res;
+}
+
 static inline tuple<tuple<vector<u32>, vector<float>>, vector<u32>>
 from_data(const vector<patch_info> &patches, const frame &frame) {
   tuple<tuple<vector<u32>, vector<float>>, vector<u32>> res;
@@ -255,12 +268,10 @@ from_data(const vector<patch_info> &patches, const frame &frame) {
     points += p.size();
   }
 
-  _data.reserve(points);
   position.reserve(points * 3);
   indices.reserve(points);
 
-  for (auto &p : frame.data)
-    _data.insert(_data.cend(), p.data.cbegin(), p.data.cend());
+  _data = from_frame(frame, points);
 
   for (const auto &patch : patches) {
     for (auto k = patch.K1; k <= patch.K2; ++k) {
@@ -406,6 +417,18 @@ struct patch_domain {
     }
   }
 };
+
+static inline tuple<float, float> frame_minmax(const frame &frame) {
+  float _min = frame.data.front().data.front();
+  float _max = frame.data.front().data.front();
+  for (auto &patch_frame : frame.data) {
+    auto &data = patch_frame.data;
+    auto [__min, __max] = minmax_element(data.begin(), data.end());
+    _min = min(_min, *__min);
+    _max = max(_max, *__max);
+  }
+  return {_min, _max};
+}
 
 static inline vector<vector<patch_domain>>
 merge(const vector<patch_info> &patches) {

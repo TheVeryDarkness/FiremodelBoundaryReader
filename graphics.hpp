@@ -61,12 +61,27 @@ struct gl_type_enum<GLdouble> : integral_constant<GLenum, GL_DOUBLE> {};
 template <typename T>
 constexpr static inline GLenum gl_type_enum_v = gl_type_enum<T>::value;
 
+template <typename... types> struct type_list {};
+
+template <size_t i, typename... types> struct subset_start_from;
+template <size_t i, typename first, typename... res>
+struct subset_start_from<i, first, res...> {
+  using type = typename subset_start_from<i - 1, res...>::type;
+};
+template <typename... types> struct subset_start_from<0, types...> {
+  using type = type_list<types...>;
+};
+
+template <size_t i, typename... types>
+using subset_start_from_t = typename subset_start_from<i, types...>::type;
+
 static inline glm::vec3 cameraPos = glm::vec3(-1.0f, 0.0f, 0.0f);
 static inline glm::vec3 cameraFront = glm::vec3(1.0f, 0.0f, 0.0f);
 static inline glm::vec3 cameraUp = glm::vec3(0.0f, 0.0f, 1.0f);
 /// @var time between current frame and last frame
-static inline float deltaTime = 0.0f;
-static inline float lastFrame = 0.0f;
+static inline double deltaTime = 0.0;
+static inline double lastFrame = 0.0;
+static inline double firstFrame = 0.0;
 
 #define STR(NUM) #NUM
 #define DETECT_ERROR                                                           \
@@ -86,10 +101,44 @@ static inline float lastFrame = 0.0f;
   } while (0);
 
 static inline bool cursor_enabled = false;
-static inline bool patch_loop = false;
-static inline size_t &current = selected_patch;
-static inline size_t patches_count = 0;
+static inline bool index_loop = false;
+static inline size_t current = 0;
+static inline size_t index_max = 0;
 static inline float key_move_sensity = 0.5f;
+
+static inline bool keyX[2] = {};
+static inline bool keyY[2] = {};
+
+static inline void cameraMoveForward(float length) {
+  cameraPos += cameraFront * length;
+}
+static inline void cameraMoveBackward(float length) {
+  cameraPos -= cameraFront * length;
+}
+static inline void cameraMoveLeft(float length) {
+  cameraPos += glm::cross(cameraUp, cameraFront) * length;
+}
+static inline void cameraMoveRight(float length) {
+  cameraPos += glm::cross(cameraFront, cameraUp) * length;
+}
+static inline void cameraRotateX(float radian) {
+  cameraFront += glm::cross(cameraFront, cameraUp) * radian;
+}
+static inline void cameraRotateY(float radian) {
+  cameraFront += cameraUp * radian;
+}
+
+static inline void keyCameraMove(float deltaTime) {
+  auto length = deltaTime * key_move_sensity;
+  if (keyX[1] && !keyX[0])
+    cameraMoveRight(length);
+  if (keyX[0] && !keyX[1])
+    cameraMoveLeft(length);
+  if (keyY[1] && !keyY[0])
+    cameraMoveForward(length);
+  if (keyX[0] && !keyX[1])
+    cameraMoveBackward(length);
+}
 
 static inline void onKey(GLFWwindow *window, const int key, int scancode,
                          int action, const int mods) {
@@ -105,20 +154,14 @@ static inline void onKey(GLFWwindow *window, const int key, int scancode,
                                       : GLFW_CURSOR_DISABLED);
     }
 
-  if (action == GLFW_REPEAT || action == GLFW_PRESS) {
-    if (key == GLFW_KEY_LEFT) {
-      cameraPos += glm::cross(cameraUp, cameraFront) * key_move_sensity;
-    }
-    if (key == GLFW_KEY_RIGHT) {
-      cameraPos += glm::cross(cameraFront, cameraUp) * key_move_sensity;
-    }
-    if (key == GLFW_KEY_UP) {
-      cameraPos += cameraFront * key_move_sensity;
-    }
-    if (key == GLFW_KEY_DOWN) {
-      cameraPos -= cameraFront * key_move_sensity;
-    }
-  }
+  if (key == GLFW_KEY_LEFT)
+    keyX[0] = action != GLFW_RELEASE;
+  if (key == GLFW_KEY_RIGHT)
+    keyX[1] = action != GLFW_RELEASE;
+  if (key == GLFW_KEY_UP)
+    keyY[1] = action != GLFW_RELEASE;
+  if (key == GLFW_KEY_DOWN)
+    keyY[0] = action != GLFW_RELEASE;
 
   const bool continuous = mods & GLFW_MOD_CAPS_LOCK;
 
@@ -126,15 +169,15 @@ static inline void onKey(GLFWwindow *window, const int key, int scancode,
     if (action == GLFW_PRESS || (continuous && action == GLFW_REPEAT)) {
       if (current > 0)
         --current;
-      else if (patch_loop)
-        current = patches_count ? patches_count - 1 : 0;
+      else if (index_loop)
+        current = index_max ? index_max - 1 : 0;
     }
 
   if (key == GLFW_KEY_RIGHT_BRACKET)
     if (action == GLFW_PRESS || (continuous && action == GLFW_REPEAT)) {
-      if (current < patches_count) {
+      if (current < index_max) {
         ++current;
-      } else if (patch_loop)
+      } else if (index_loop)
         current = 0;
     }
 
@@ -342,7 +385,7 @@ create_shader_program(initializer_list<const char *> vertexShaderSource,
 }
 
 static bool fullScreen = false;
-static bool wireframe = true;
+static bool wireframe = false;
 
 /// @retval Start visualization or discard.
 static inline bool visualization_settings() {
@@ -456,33 +499,36 @@ static inline void bind_attribute(const vector<U> &vec, const GLuint VBO) {
   DETECT_ERROR;
 }
 
-template <typename... types> struct type_list {};
-
-template <typename... T, typename... U, size_t VBOCount, size_t... i>
+template <size_t offset, typename... T, typename... U, size_t VBOCount,
+          size_t... i>
 static inline void bind_attributes_sequence(const tuple<vector<U>...> &vec,
                                             const GLuint (&VBOs)[VBOCount],
                                             type_list<T...>,
                                             index_sequence<i...>) {
   using t = tuple<T...>;
   static_assert(((i < VBOCount) && ...), "Out of bound.");
-  (bind_attribute<tuple_element_t<i, t>, i>(get<i>(vec), VBOs[i]), ...);
+  static_assert(((i < sizeof...(U)) && ...), "Out of bound.");
+  (bind_attribute<tuple_element_t<i, t>, i>(get<i>(vec), VBOs[offset + i]),
+   ...);
 }
 
-template <typename... T, typename... U, size_t VBOCount>
+template <size_t offset, typename... T, typename... U, size_t VBOCount>
 static inline void bind_attributes(const tuple<vector<U>...> &vec,
                                    const GLuint (&VBOs)[VBOCount],
                                    type_list<T...> Ts) {
-  static_assert(sizeof...(T) == VBOCount);
-  static_assert(sizeof...(U) == VBOCount);
-  bind_attributes_sequence(vec, VBOs, Ts, make_index_sequence<VBOCount>{});
+  static_assert(offset + sizeof...(T) == VBOCount);
+  static_assert(offset + sizeof...(U) == VBOCount);
+  bind_attributes_sequence<offset>(vec, VBOs, Ts,
+                                   make_index_sequence<VBOCount - offset>{});
 }
 
-template <typename Index, typename GetData, typename GetNearFar,
-          typename GetDrawMode, typename GetMinMax, typename GetDomain,
-          typename... Vertex>
-static inline int visualize(GetData &&getData, GetNearFar &&getNearFar,
-                            GetDrawMode &&getDrawMode, GetMinMax &&getMinMax,
-                            GetDomain &&getDomain,
+template <typename Index, size_t refreshData, typename GetData,
+          typename GetRefreshedData, typename GetNearFar, typename GetDrawMode,
+          typename GetMinMax, typename GetDomain, typename... Vertex>
+static inline int visualize(GetData &&getData,
+                            GetRefreshedData &&getRefreshedData,
+                            GetNearFar &&getNearFar, GetDrawMode &&getDrawMode,
+                            GetMinMax &&getMinMax, GetDomain &&getDomain,
                             initializer_list<const char *> vertexShaderSource,
                             initializer_list<const char *> fragmentShaderSource,
                             type_list<Vertex...>) {
@@ -494,6 +540,7 @@ static inline int visualize(GetData &&getData, GetNearFar &&getNearFar,
       "Can't get data.");
 
   constexpr static auto vertexAttributesCount = sizeof...(Vertex);
+  static_assert(refreshData <= vertexAttributesCount);
 
   firstMouse = true;
 
@@ -572,7 +619,7 @@ static inline int visualize(GetData &&getData, GetNearFar &&getNearFar,
 
   DETECT_ERROR;
 
-  bind_attributes(vertices, VBO, type_list<Vertex...>{});
+  bind_attributes<0>(vertices, VBO, type_list<Vertex...>{});
 
   DETECT_ERROR;
 
@@ -630,6 +677,7 @@ static inline int visualize(GetData &&getData, GetNearFar &&getNearFar,
 
     DETECT_ERROR;
   }
+
   if constexpr (!is_same_v<GetDomain, nullptr_t>) {
     const auto [x, y, z] = getDomain();
 
@@ -650,8 +698,23 @@ static inline int visualize(GetData &&getData, GetNearFar &&getNearFar,
     DETECT_ERROR;
   }
 
+  firstFrame = lastFrame = glfwGetTime();
+
   // Render loop
   while (!glfwWindowShouldClose(window)) {
+    double currentFrame = glfwGetTime();
+    deltaTime = currentFrame - lastFrame;
+    lastFrame = currentFrame;
+
+    keyCameraMove((double)deltaTime);
+
+    if constexpr (refreshData < vertexAttributesCount) {
+      auto refreshedData = getRefreshedData();
+      bind_attributes<refreshData>(
+          make_tuple(refreshedData), VBO,
+          subset_start_from_t<refreshData, Vertex...>{});
+    }
+
     // camera/view transformation
     glm::mat4 view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
 
@@ -806,17 +869,15 @@ constexpr static inline float defaultNear = .01f;
 constexpr static inline float defaultFar = 1000.f;
 
 static inline int visualize_patch(const vector<patch_info> &patches) {
-  patches_count = patches.size();
-  if (current > patches.size()) {
-    current = 0;
-  }
+  index_max = patches.size();
 
   while (true) {
     if (!visualization_settings())
       return 0;
 
-    visualize<GLuint>(
+    visualize<GLuint, 2>(
         [&patches]() { return from_patches<true>(patches, wireframe); },
+        nullptr,
         [&patches]() -> tuple<float, float> {
           return {defaultNear, patch_far(patches)};
         },
@@ -827,33 +888,33 @@ static inline int visualize_patch(const vector<patch_info> &patches) {
         {fragmentShaderSource}, type_list<GLuint[3], GLuint>{});
   }
 }
-static inline int visualize_frame(const vector<patch_info> &patches,
-                                  const frame &frame, data_category category) {
+static inline int visualize_frames(const vector<patch_info> &patches,
+                                   const vector<frame> &frames,
+                                   data_category category) {
+  assert(!frames.empty());
+  index_max = frames.size();
   while (true) {
     if (!visualization_settings())
       return 0;
 
-    float _min = frame.data.front().data.front();
-    float _max = frame.data.front().data.front();
-    for (auto &patch_frame : frame.data) {
-      auto &data = patch_frame.data;
-      auto [__min, __max] = minmax_element(data.begin(), data.end());
-      _min = min(_min, *__min);
-      _max = max(_max, *__max);
-    }
-
-    visualize<GLuint>(
-        [&patches, &frame ]() -> auto{
+    visualize<GLuint, 1>(
+        [&patches, &frames ]() -> auto{
           glPointSize(10);
-          return from_data(patches, frame);
+
+          return from_data(patches, frames.front());
+        },
+        [&frames]() -> vector<float> {
+          auto i = current % frames.size();
+          auto &frame = frames[i];
+          return from_frame(frame, 0);
         },
         [&patches]() constexpr->tuple<float, float> {
           return {defaultNear, patch_far(patches)};
         },
-        []() { return GL_POINTS; }, [=]() { return make_tuple(_min, _max); },
-        nullptr,
+        []() { return GL_POINTS; },
+        [&frames]() { return frame_minmax(frames.back()); }, nullptr,
         {vertexShaderSource.head_pos_pv_color, vertexShaderSource.data,
-         vertexShaderSource.main_begin, get_color(category),
+         vertexShaderSource.main_begin, vertexShaderSource.main_data_to_rgb,
          vertexShaderSource.main_end},
         {fragmentShaderSource}, type_list<GLuint[3], float>{});
   }
@@ -868,8 +929,8 @@ static inline int visualize_data(const vector<float> &data, u32 m, u32 n) {
     if (!visualization_settings())
       return 0;
 
-    visualize<GLuint>(
-        [&data, n]() { return from_matrix_data(data, n, wireframe); },
+    visualize<GLuint, 1>(
+        [&data, n]() { return from_matrix_data(data, n, wireframe); }, nullptr,
         [&data, X, Y, Z]() -> tuple<float, float> {
           return {defaultNear, 5 * max(initializer_list<float>{X, Y, Z})};
         },
@@ -894,10 +955,11 @@ static inline int visualize_3d_elements(const vector<float> &nodes,
     if (!visualization_settings())
       return 0;
 
-    visualize<GLuint>(
+    visualize<GLuint, 1>(
         [&nodes, &vertex_count, &elements, ratio]() {
           return from_elements(nodes, vertex_count, elements, wireframe, ratio);
         },
+        nullptr,
         [&nodes]() constexpr->tuple<float, float> {
           return {defaultNear, defaultFar};
         },
@@ -923,11 +985,12 @@ static inline int visualize_patches_and_elements(
     if (!visualization_settings())
       return 0;
 
-    visualize<GLuint>(
+    visualize<GLuint, 1>(
         [&nodes, &vertex_count, &elements, &patches, sum, ratio]() {
           return from_patches_and_elements(nodes, vertex_count, elements,
                                            patches, wireframe, sum, ratio);
         },
+        nullptr,
         [&nodes]() constexpr->tuple<float, float> {
           return {defaultNear, defaultFar};
         },
@@ -947,7 +1010,7 @@ static inline int visualize_nodes(const vector<float> &nodes,
     if (!visualization_settings())
       return 0;
 
-    visualize<GLuint>(
+    visualize<GLuint, 1>(
         [&nodes, &indices, ratio ]() -> auto{
           glPointSize(20);
           auto _nodes = nodes;
@@ -955,6 +1018,7 @@ static inline int visualize_nodes(const vector<float> &nodes,
             n *= ratio;
           return make_tuple(make_tuple(_nodes), indices);
         },
+        nullptr,
         [&nodes]() constexpr->tuple<float, float> {
           return {defaultNear, defaultFar};
         },
@@ -974,13 +1038,14 @@ static inline int visualize_primitives(const vector<float> &nodes,
     if (!visualization_settings())
       return 0;
 
-    visualize<GLuint>(
+    visualize<GLuint, 1>(
         [&nodes, &primitive, ratio ]() -> auto{
           auto _nodes = nodes;
           for (auto &n : _nodes)
             n *= ratio;
           return make_tuple(make_tuple(_nodes), primitive);
         },
+        nullptr,
         [&nodes]() constexpr->tuple<float, float> {
           return {defaultNear, defaultFar};
         },
@@ -1000,7 +1065,7 @@ static inline int visualize_primitives(const vector<float> &nodes,
     if (!visualization_settings())
       return 0;
 
-    visualize<GLuint>(
+    visualize<GLuint, 1>(
         [&nodes, &patches, &vertex_count, &primitive, ratio ]() -> auto{
           auto indices =
               primitive_on_boundary(patches, nodes, primitive, wireframe);
@@ -1009,6 +1074,7 @@ static inline int visualize_primitives(const vector<float> &nodes,
             n *= ratio;
           return make_tuple(make_tuple(_nodes), indices);
         },
+        nullptr,
         [&nodes]() constexpr->tuple<float, float> {
           return {defaultNear, defaultFar};
         },

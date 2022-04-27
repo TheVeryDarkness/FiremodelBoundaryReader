@@ -284,7 +284,6 @@ static inline vector<u32> primitive_on_boundary(
         if (set_contains_all(set, {i0, i1})) {
           res.push_back(i0);
           res.push_back(i1);
-          break;
         }
       }
     else
@@ -300,7 +299,6 @@ static inline vector<u32> primitive_on_boundary(
           res.push_back(i0);
           res.push_back(i1);
           res.push_back(i2);
-          break;
         }
       }
   }

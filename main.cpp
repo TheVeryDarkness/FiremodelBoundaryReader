@@ -434,7 +434,7 @@ a - Analyze patch data.)";
 #if GRAPHICS_ENABLED
     case 'V': {
       if (!frames.empty()) {
-        visualize_frame(patches, frames.back(), get_data_category(units));
+        visualize_frames(patches, frames, get_data_category(units));
       } else
         goto CMDNF;
     } break;
