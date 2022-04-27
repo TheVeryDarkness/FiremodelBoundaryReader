@@ -153,29 +153,38 @@ read_mapdl(istream &in) {
   return res;
 }
 
-static inline void write_table(ostream &o, const path &directory,
-                               const char *name, u32 surface_index,
-                               vector<u32> surface_indices,
-                               const vector<frame> &frames,
-                               const vector<float> &vec) {
+static inline void write_table(
+    ostream &o, const path &directory, const char *name, u32 surface_index,
+    vector<u32>::const_iterator surface_indices_begin,
+    vector<u32>::const_iterator surface_indices_end,
+    const vector<frame> &frames, vector<float>::const_iterator vec_begin,
+    vector<float>::const_iterator vec_end) {
   o << "*DIM, " << name << surface_index + 1 << ", TABLE, " << frames.size()
     << ", 1, 1, TIME," << endl;
   o << "*TREAD, " << name << surface_index + 1 << ", " << surface_index
     << ", txt, " << absolute(directory).generic_string() << ",1 " << endl;
 
-  size_t i = 0;
-  ofstream tout(directory /
-                path(to_string(surface_index)).replace_extension(path("txt")));
+  static const path ext = path("txt");
+  assert(vec.size() == frames.size());
+
+  auto p = directory / path(to_string(surface_index)).replace_extension(ext);
+  ofstream tout;
+  tout.open(p);
   assert(tout);
   tout << "TIME " << name << endl;
 
   for (const frame &frame : frames) {
-    tout << frame.time << " " << vec[i] * 1000 << endl;
-    ++i;
+    assert(vec_begin != vec_end);
+    tout << frame.time << " " << *vec_begin * 1000 << endl;
+    ++vec_begin;
   }
 
   o << "NSEL,NONE,,," << endl;
-  for (auto index : surface_indices)
+  for (; surface_indices_begin != surface_indices_end;
+       ++surface_indices_begin) {
+    auto index = *surface_indices_begin;
     o << "NSEL,A,NODE,," << index + 1 << endl;
+  }
   o << "SF,ALL," << name << ",%" << name << surface_index + 1 << "%" << endl;
+  tout.close();
 }

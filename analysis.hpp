@@ -470,18 +470,33 @@ d - Discard.
       const auto N = frames.size();
       assert(boundary_data.size() == on_boundary_polygon_sizes.size() * N);
       u32 i = 0;
-      auto p = on_boundary_polygon_indices.begin();
-      auto e = on_boundary_polygon_indices.end();
-      auto P = boundary_data.begin();
-      auto E = boundary_data.end();
-      for (auto sz : on_boundary_polygon_sizes) {
-        assert(p < e);
-        assert(P < E);
-        write_table(out, opt2.value(), "HFLUX", i, vector<u32>(p, p + sz),
-                    frames, vector<float>(P, P + N));
-        ++i;
-        p += sz;
-        P += N;
+
+      vector<vector<u32>::iterator> ps;
+      ps.reserve(on_boundary_polygon_indices.size() + 1);
+      vector<vector<float>::iterator> Ps;
+      Ps.reserve(on_boundary_polygon_indices.size() + 1);
+      {
+        auto p = on_boundary_polygon_indices.begin();
+        auto e = on_boundary_polygon_indices.end();
+        auto P = boundary_data.begin();
+        auto E = boundary_data.end();
+
+        for (auto sz : on_boundary_polygon_sizes) {
+          assert(p < e);
+          assert(P < E);
+          ps.push_back(p);
+          Ps.push_back(P);
+          p += sz;
+          P += N;
+        }
+        ps.push_back(p);
+        Ps.push_back(P);
+      }
+
+#pragma omp parallel for
+      for (long i = 0; i < on_boundary_polygon_sizes.size(); ++i) {
+        write_table(out, opt2.value(), "HFLUX", i, ps[i], ps[i + 1], frames,
+                    Ps[i], Ps[i + 1]);
       }
       out << "FINISH" << endl << "/SOLU" << endl << "ALLSEL,ALL" << endl;
     } break;
