@@ -1,6 +1,8 @@
 #pragma once
 #include "types.hpp"
+#include <algorithm>
 #include <map>
+using std::accumulate;
 using std::initializer_list;
 using std::map;
 
@@ -279,5 +281,43 @@ coordinates(const vector<float> &vec, const vector<u32> &indices) {
     y.push_back(vec[3 * i + 1]);
     z.push_back(vec[3 * i + 2]);
   }
+  return res;
+}
+
+/// @brief Return real indices of nodes.
+/// @param nodes: Nodes coordinates.
+/// @param vertex_count: Count of nodes in elements
+/// @param elements: Indices of nodes in element.
+/// @param wireframe
+/// @return Real indices of nodes in primitives.
+static inline vector<float>
+polygon_as_centroid(const vector<float> &nodes,
+                    const vector<u32> &polygon_sizes,
+                    const vector<u32> &polygon_indices) {
+  vector<float> res;
+
+  res.reserve(3 * polygon_sizes.size());
+
+  assert(accumulate(polygon_sizes.begin(), polygon_sizes.end(), 0) ==
+         polygon_indices.size());
+
+  auto p = polygon_indices.begin();
+  auto e = polygon_indices.end();
+  for (const auto &sz : polygon_sizes) {
+    assert(p < e);
+    float x = 0;
+    float y = 0;
+    float z = 0;
+    for (size_t i = 0; i < sz; ++i) {
+      auto I = *p++;
+      x += nodes[3 * I];
+      y += nodes[3 * I + 1];
+      z += nodes[3 * I + 2];
+    }
+    res.push_back(x / sz);
+    res.push_back(y / sz);
+    res.push_back(z / sz);
+  }
+
   return res;
 }

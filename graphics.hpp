@@ -104,7 +104,7 @@ static inline bool cursor_enabled = false;
 static inline bool index_loop = false;
 static inline size_t current = 0;
 static inline size_t index_max = 0;
-static inline float key_move_sensity = 0.5f;
+static inline float key_move_sensity = 2.f;
 
 static inline bool keyX[2] = {};
 static inline bool keyY[2] = {};
@@ -175,7 +175,7 @@ static inline void onKey(GLFWwindow *window, const int key, int scancode,
 
   if (key == GLFW_KEY_RIGHT_BRACKET)
     if (action == GLFW_PRESS || (continuous && action == GLFW_REPEAT)) {
-      if (current < index_max) {
+      if (current < index_max - 1) {
         ++current;
       } else if (index_loop)
         current = 0;
@@ -533,11 +533,18 @@ static inline int visualize(GetData &&getData,
                             initializer_list<const char *> fragmentShaderSource,
                             type_list<Vertex...>) {
 
-  static_assert(
-      is_invocable_r_v<
-          tuple<tuple<vector<remove_all_extents_t<Vertex>>...>, vector<Index>>,
-          GetData>,
-      "Can't get data.");
+  constexpr static auto indexed = !is_same_v<Index, nullptr_t>;
+
+  static_assert(indexed
+                    ? is_invocable_r_v<
+                          tuple<tuple<vector<remove_all_extents_t<Vertex>>...>,
+                                vector<Index>>,
+                          GetData>
+                    : is_invocable_r_v<
+                          tuple<tuple<vector<remove_all_extents_t<Vertex>>...>,
+                                nullptr_t>,
+                          GetData>,
+                "Can't get data.");
 
   constexpr static auto vertexAttributesCount = sizeof...(Vertex);
   static_assert(refreshData <= vertexAttributesCount);
@@ -623,22 +630,24 @@ static inline int visualize(GetData &&getData,
 
   DETECT_ERROR;
 
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-  glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(Index),
-               indices.data(), GL_STATIC_DRAW);
+  if constexpr (indexed) {
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(Index),
+                 indices.data(), GL_STATIC_DRAW);
 
 #ifndef NDEBUG
-  size_t out = 0;
-  size_t vc = std::get<0>(vertices).size() /
-              extent<std::tuple_element_t<0, tuple<Vertex...>>>;
-  for (auto i : indices)
-    if (i > vc)
-      ++out;
-  if (out > 0)
-    cerr << out << " vertices out of nodes count detected." << endl;
+    size_t out = 0;
+    size_t vc = std::get<0>(vertices).size() /
+                extent<std::tuple_element_t<0, tuple<Vertex...>>>;
+    for (auto i : indices)
+      if (i > vc)
+        ++out;
+    if (out > 0)
+      cerr << out << " vertices out of nodes count detected." << endl;
 #endif // !NDEBUG
 
-  DETECT_ERROR;
+    DETECT_ERROR;
+  }
 
   for (size_t i = 0; i < vertexAttributesCount; ++i)
     glEnableVertexAttribArray(i);
@@ -734,7 +743,12 @@ static inline int visualize(GetData &&getData,
 
     glUseProgram(shaderProgram);
     glBindVertexArray(VAO);
-    glDrawElements(mode, (GLuint)indices.size(), gl_type_enum_v<Index>, 0);
+    if constexpr (indexed)
+      glDrawElements(mode, (GLuint)indices.size(), gl_type_enum_v<Index>, 0);
+    else
+      glDrawArrays(mode, 0,
+                   get<0>(vertices).size() /
+                       extent<tuple_element_t<0, tuple<Vertex...>>>);
     glBindVertexArray(0);
 
     glfwSwapBuffers(window);
@@ -1026,6 +1040,52 @@ static inline int visualize_nodes(const vector<float> &nodes,
         {vertexShaderSource.head_pos_pv_color, vertexShaderSource.main_begin,
          vertexShaderSource.main_default_color, vertexShaderSource.main_end},
         {fragmentShaderSource}, type_list<float[3]>{});
+  }
+}
+
+static inline int visualize_nodes(const vector<float> &nodes,
+                                  const vector<float> &data) {
+  float _max = *max_element(nodes.cbegin(), nodes.cend());
+  float ratio = _max == 0 ? 1 : 100 / _max;
+
+  const auto frames_count = data.size() * 3 / nodes.size();
+  const auto nodes_count = nodes.size() / 3;
+  assert(data.size() == frames_count * nodes_count);
+  index_max = frames_count;
+
+  static vector<float> data_slice;
+  data_slice.reserve(nodes_count);
+  while (true) {
+    if (!visualization_settings())
+      return 0;
+
+    visualize<nullptr_t, 1>(
+        [&nodes, &data, ratio, frames_count, nodes_count ]() -> auto{
+          glPointSize(20);
+          auto _nodes = nodes;
+          for (auto &n : _nodes)
+            n *= ratio;
+          data_slice.clear();
+          for (size_t j = 0; j < nodes_count; ++j)
+            data_slice.push_back(data[j * frames_count]);
+          return make_tuple(make_tuple(_nodes, data_slice), nullptr);
+        },
+        [&data, frames_count, nodes_count]() -> const vector<float> & {
+          auto i = current % frames_count;
+          data_slice.clear();
+          for (size_t j = 0; j < nodes_count; ++j)
+            data_slice.push_back(data[j * frames_count + i]);
+          return data_slice;
+        },
+        [&nodes]() constexpr->tuple<float, float> {
+          return {defaultNear, defaultFar};
+        },
+        []() { return GL_POINTS; }, [&data]() { return data_minmax(data); },
+        nullptr,
+        {vertexShaderSource.head_pos_pv_color, vertexShaderSource.data,
+         vertexShaderSource.main_begin, vertexShaderSource.main_data_to_rgb,
+         vertexShaderSource.main_end},
+        {fragmentShaderSource}, type_list<float[3], float>{});
   }
 }
 

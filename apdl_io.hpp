@@ -159,32 +159,38 @@ static inline void write_table(
     vector<u32>::const_iterator surface_indices_end,
     const vector<frame> &frames, vector<float>::const_iterator vec_begin,
     vector<float>::const_iterator vec_end) {
-  o << "*DIM, " << name << surface_index + 1 << ", TABLE, " << frames.size()
-    << ", 1, 1, TIME," << endl;
-  o << "*TREAD, " << name << surface_index + 1 << ", " << surface_index
-    << ", txt, " << absolute(directory).generic_string() << ",1 " << endl;
 
   static const path ext = path("txt");
-  assert(vec.size() == frames.size());
+  assert(vec_begin + frames.size() == vec_end);
+
+  if (all_of(vec_begin, vec_end, [](float data) { return data == 0.0f; }))
+    return;
 
   auto p = directory / path(to_string(surface_index)).replace_extension(ext);
   ofstream tout;
   tout.open(p);
   assert(tout);
-  tout << "TIME " << name << endl;
+  tout << "TIME " << name << '\n';
 
   for (const frame &frame : frames) {
     assert(vec_begin != vec_end);
-    tout << frame.time << " " << *vec_begin * 1000 << endl;
+    tout << frame.time << ' ' << *vec_begin * 1000 << '\n';
     ++vec_begin;
   }
-
-  o << "NSEL,NONE,,," << endl;
-  for (; surface_indices_begin != surface_indices_end;
-       ++surface_indices_begin) {
-    auto index = *surface_indices_begin;
-    o << "NSEL,A,NODE,," << index + 1 << endl;
-  }
-  o << "SF,ALL," << name << ",%" << name << surface_index + 1 << "%" << endl;
   tout.close();
+
+#pragma omp critical
+  {
+    o << "*DIM, " << name << surface_index + 1 << ", TABLE, " << frames.size()
+      << ", 1, 1, TIME,\n";
+    o << "*TREAD, " << name << surface_index + 1 << ", " << surface_index
+      << ", txt, " << absolute(directory).generic_string() << ",1\n";
+    o << "NSEL,NONE,,,\n";
+    for (; surface_indices_begin != surface_indices_end;
+         ++surface_indices_begin) {
+      auto index = *surface_indices_begin;
+      o << "NSEL,A,NODE,," << index + 1 << '\n';
+    }
+    o << "SF,ALL," << name << ",%" << name << surface_index + 1 << "%\n";
+  }
 }

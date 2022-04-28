@@ -430,6 +430,11 @@ static inline tuple<float, float> frame_minmax(const frame &frame) {
   return {_min, _max};
 }
 
+static inline tuple<float, float> data_minmax(const vector<float> &data) {
+  auto [_min, _max] = minmax_element(data.cbegin(), data.cend());
+  return {*_min, *_max};
+}
+
 static inline vector<vector<patch_domain>>
 merge(const vector<patch_info> &patches) {
   vector<vector<patch_domain>> res;

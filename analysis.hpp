@@ -272,6 +272,33 @@ static inline void analyze(const vector<patch_info> &patches,
     return !nodes.empty() && !element_sizes.empty() && !element_indices.empty();
   };
 
+  bool polygons_calculated = false;
+  tuple<vector<u32>, vector<u32>> polygons;
+
+  auto calculate_polygon = [
+    &element_sizes, &element_indices, &polygons, &calculated =
+    polygons_calculated
+  ]() -> const auto & {
+    if (!calculated) {
+      polygons = get_polygon(element_sizes, element_indices);
+      calculated = true;
+    }
+    return polygons;
+  };
+
+  bool average_calculated = false;
+  tuple<vector<u32>, vector<u32>, vector<float>> polygons_average;
+  auto calculate_average = [
+        &calculated = average_calculated, &polygons_average, &calculate_polygon,
+        &patches, &nodes, &frames
+  ]() -> const auto & {
+    auto &[polygon_sizes, polygon_indices] = calculate_polygon();
+    if (!calculated)
+      polygons_average = polygon_average(patches, nodes, polygon_sizes,
+                                         polygon_indices, frames);
+    return polygons_average;
+  };
+
   while (true) {
     cout << R"(
 Commands:
@@ -307,7 +334,9 @@ R - Visualize elements primitives on boundary.)";
 
     if (!patches.empty() && !frames.empty() && elem_avail())
       cout << R"(
-l - Write APDL output.)";
+l - Write APDL output.
+A - Review output by visualizing them.
+)";
 
     if (!frames.empty() && selected_patch < patches.size())
       cout <<
@@ -398,8 +427,7 @@ d - Discard.
       break;
     case 'Y':
       if (!patches.empty() && elem_avail()) {
-        auto [polygon_sizes, polygon_indices] =
-            get_polygon(element_sizes, element_indices);
+        auto &[polygon_sizes, polygon_indices] = calculate_polygon();
         auto [sizes_of_polygon_vertices_on_boundary,
               indices_of_polygon_vertices_on_boundary] =
             polygon_on_boundary(patches, nodes, polygon_sizes, polygon_indices);
@@ -460,20 +488,15 @@ d - Discard.
       }
       out << "/PREP7" << endl;
 
-      auto [polygon_sizes, polygon_indices] =
-          get_polygon(element_sizes, element_indices);
-
-      auto [on_boundary_polygon_sizes, on_boundary_polygon_indices,
-            boundary_data] = polygon_average(patches, nodes, polygon_sizes,
-                                             polygon_indices, frames);
-
       const auto N = frames.size();
-      assert(boundary_data.size() == on_boundary_polygon_sizes.size() * N);
-      u32 i = 0;
 
-      vector<vector<u32>::iterator> ps;
+      auto &[on_boundary_polygon_sizes, on_boundary_polygon_indices,
+             boundary_data] = calculate_average();
+      assert(boundary_data.size() == on_boundary_polygon_sizes.size() * N);
+
+      vector<vector<u32>::const_iterator> ps;
       ps.reserve(on_boundary_polygon_indices.size() + 1);
-      vector<vector<float>::iterator> Ps;
+      vector<vector<float>::const_iterator> Ps;
       Ps.reserve(on_boundary_polygon_indices.size() + 1);
       {
         auto p = on_boundary_polygon_indices.begin();
@@ -493,12 +516,19 @@ d - Discard.
         Ps.push_back(P);
       }
 
-#pragma omp parallel for
+#pragma omp parallel for schedule(dynamic, 1000)
       for (long i = 0; i < on_boundary_polygon_sizes.size(); ++i) {
         write_table(out, opt2.value(), "HFLUX", i, ps[i], ps[i + 1], frames,
                     Ps[i], Ps[i + 1]);
       }
       out << "FINISH" << endl << "/SOLU" << endl << "ALLSEL,ALL" << endl;
+    } break;
+    case 'A': {
+      auto &[on_boundary_polygon_sizes, on_boundary_polygon_indices,
+             boundary_data] = calculate_average();
+      auto centroid = polygon_as_centroid(nodes, on_boundary_polygon_sizes,
+                                          on_boundary_polygon_indices);
+      visualize_nodes(centroid, boundary_data);
     } break;
     case 'S': {
       size_t dimension = -1;

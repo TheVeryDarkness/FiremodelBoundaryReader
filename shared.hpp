@@ -396,6 +396,7 @@ static inline void find(const u32 i1, const u32 i2, const u32 j1, const u32 j2,
                         const patch_info &patch, const vector<u32> &I,
                         const vector<u32> &J, vector<float> &sum, u32 &count) {
   assert(count == 0);
+  assert(sum.size() == frames.size());
   auto [I1, I2] = patch.border<dim1>();
   auto [J1, J2] = patch.border<dim2>();
   auto imin = max(I1, i1);
@@ -421,6 +422,7 @@ template <typename Ty> static inline bool all_same(const vector<Ty> &vec) {
                 [&vec](auto v) { return v == vec.front(); });
 }
 
+/// @return Polygon sizes, polygon indices and polygon average
 static inline tuple<vector<u32>, vector<u32>, vector<float>>
 polygon_average(const vector<patch_info> &patches, const vector<float> &nodes,
                 const vector<u32> &polygon_sizes,
