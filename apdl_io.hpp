@@ -181,10 +181,10 @@ static inline void write_table(
 
 #pragma omp critical
   {
-    o << "*DIM, " << name << surface_index + 1 << ", TABLE, " << frames.size()
-      << ", 1, 1, TIME,\n";
-    o << "*TREAD, " << name << surface_index + 1 << ", " << surface_index
-      << ", txt, " << absolute(directory).generic_string() << ",1\n";
+    o << "*DIM," << name << surface_index + 1 << ",TABLE," << frames.size()
+      << ",1,1,TIME,\n";
+    o << "*TREAD," << name << surface_index + 1 << "," << surface_index
+      << ",txt," << absolute(directory).generic_string() << ",1\n";
     o << "NSEL,NONE,,,\n";
     for (; surface_indices_begin != surface_indices_end;
          ++surface_indices_begin) {
