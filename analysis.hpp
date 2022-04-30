@@ -559,10 +559,16 @@ d - Discard.
       }
       out << "FINISH" << endl << "/SOLU" << endl << "ALLSEL,ALL" << endl;
     } break;
-    case 'A': {
-      auto &[_, centroid, boundary_data] = calculate_average();
-      visualize_nodes(centroid, boundary_data);
-    } break;
+    case 'A':
+      if (!patches.empty() && elem_avail()) {
+        auto &[_, centroid, boundary_data] = calculate_average();
+        if (centroid.empty() || boundary_data.empty()) {
+          cerr << "No surfaces on boundary found\n";
+          break;
+        }
+        visualize_nodes(centroid, boundary_data, frames.size());
+      }
+      break;
     case 'S': {
       size_t dimension = -1;
       cin >> dimension;
