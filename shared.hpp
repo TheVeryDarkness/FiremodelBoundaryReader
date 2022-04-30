@@ -305,31 +305,37 @@ static inline vector<u32> primitive_on_boundary(
   return res;
 }
 
-static inline tuple<vector<u32>, vector<u32>> polygon_on_boundary(
+template <bool withElementNumber>
+static inline tuple<vector<u32>, vector<u32>, vector<u32>> polygon_on_boundary(
     const vector<patch_info> &patches, const vector<float> &nodes,
-    const vector<u32> &polygon_sizes, const vector<u32> &polygon_indices) {
+    const vector<u32> &polygon_sizes, const vector<u32> &polygon_indices,
+    const vector<u32> &element_index_map) {
   assert(nodes.size() % 3 == 0);
   assert(!nodes.empty());
   assert(!patches.empty());
   auto sum = accumulate(polygon_sizes.begin(), polygon_sizes.end(), 0);
   assert(sum == polygon_indices.size());
-  tuple<vector<u32>, vector<u32>> res;
-  auto &[sizes, indices] = res;
+  assert(polygon_sizes.size() == element_index_map.size());
+  tuple<vector<u32>, vector<u32>, vector<u32>> res;
+  auto &[sizes, indices, numbers] = res;
 
   auto _nodes = node_on_each_connected_patch_boundary(patches, nodes);
 
   vector<u32> polygon_vertex_indices;
 
   for (const auto &set : _nodes) {
-
     auto p = polygon_indices.begin();
     auto e = polygon_indices.end();
+
+    u32 i_polygon = 0;
+    // For each polygon
     for (auto sz : polygon_sizes) {
       assert(p < e);
       polygon_vertex_indices.clear();
       polygon_vertex_indices.insert(polygon_vertex_indices.cend(), p, p + sz);
 
       bool in = true;
+      // For each vertex of current polygon
       for (auto index : polygon_vertex_indices) {
         if (!set_contains(set, index)) {
           in = false;
@@ -342,9 +348,13 @@ static inline tuple<vector<u32>, vector<u32>> polygon_on_boundary(
           assert(i < nodes.size() / 3);
           indices.push_back(i);
         }
+        if constexpr (withElementNumber)
+          numbers.push_back(element_index_map[i_polygon]);
         sizes.push_back(sz);
       }
+
       p += sz;
+      ++i_polygon;
     }
   }
   return res;
@@ -417,17 +427,20 @@ static inline void find(const u32 i1, const u32 i2, const u32 j1, const u32 j2,
   }
 }
 
+static inline float average(const vector<u32> &vec) {
+  return (accumulate(vec.begin(), vec.end(), 0.f) / vec.size());
+}
+
 template <typename Ty> static inline bool all_same(const vector<Ty> &vec) {
   return all_of(vec.begin(), vec.end(),
                 [&vec](auto v) { return v == vec.front(); });
 }
 
-/// @return Polygon sizes, polygon indices and polygon average
-static inline tuple<vector<u32>, vector<u32>, vector<float>>
-polygon_average(const vector<patch_info> &patches, const vector<float> &nodes,
-                const vector<u32> &polygon_sizes,
-                const vector<u32> &polygon_indices,
-                const vector<frame> &frames) {
+/// @return Polygon surface number and polygon average
+static inline tuple<vector<u32>, vector<float>, vector<float>> polygon_average(
+    const vector<patch_info> &patches, const vector<float> &nodes,
+    const vector<u8> &element_sizes, const vector<u32> &polygon_sizes,
+    const vector<u32> &polygon_indices, const vector<frame> &frames) {
   assert(nodes.size() % 3 == 0);
   assert(!nodes.empty());
   assert(!patches.empty());
@@ -436,8 +449,8 @@ polygon_average(const vector<patch_info> &patches, const vector<float> &nodes,
   auto polygon_indices_count =
       accumulate(polygon_sizes.begin(), polygon_sizes.end(), 0);
   assert(polygon_indices_count == polygon_indices.size());
-  tuple<vector<u32>, vector<u32>, vector<float>> res;
-  auto &[sizes, indices, data] = res;
+  tuple<vector<u32>, vector<float>, vector<float>> res;
+  auto &[numbers, positions, data] = res;
 
   auto _nodes = node_on_each_patch_boundary(patches, nodes);
 
@@ -454,8 +467,13 @@ polygon_average(const vector<patch_info> &patches, const vector<float> &nodes,
     auto &patch = patches[i_patch];
     auto p = polygon_indices.begin();
     auto e = polygon_indices.end();
+    auto P = element_sizes.begin();
+    auto E = element_sizes.end();
+
+    u8 i_surface = 0;
     for (auto sz : polygon_sizes) {
       assert(p < e);
+      assert(P < E);
       polygon_vertex_indices.clear();
       polygon_vertex_indices.insert(polygon_vertex_indices.end(), p, p + sz);
 
@@ -466,11 +484,13 @@ polygon_average(const vector<patch_info> &patches, const vector<float> &nodes,
       }
 
       if (in) {
-        for (auto i : polygon_vertex_indices)
-          indices.push_back(i);
-        sizes.push_back(sz);
+        const auto &[I, J, K] = mesh_coordinates(nodes, polygon_vertex_indices);
 
-        const auto [I, J, K] = mesh_coordinates(nodes, polygon_vertex_indices);
+        numbers.push_back(i_surface);
+        positions.push_back(average(I));
+        positions.push_back(average(J));
+        positions.push_back(average(K));
+
         const auto [_i1, _i2] = minmax_element(I.cbegin(), I.cend());
         const auto [_j1, _j2] = minmax_element(J.cbegin(), J.cend());
         const auto [_k1, _k2] = minmax_element(K.cbegin(), K.cend());
@@ -517,6 +537,11 @@ polygon_average(const vector<patch_info> &patches, const vector<float> &nodes,
       }
 
       p += sz;
+      ++i_surface;
+      if (i_surface == *P) {
+        i_surface = 0;
+        ++P;
+      }
     }
 
     ++i_patch;

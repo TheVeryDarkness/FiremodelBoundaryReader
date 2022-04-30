@@ -300,17 +300,17 @@ static inline void process_file() {
       data;
   auto &[label, bar_label, units, patches, frames] = data;
 
-  tuple<vector<float>, vector<u32>, vector<u32>> elements_data;
-  auto &[nodes, sizes, elems] = elements_data;
+  tuple<vector<float>, vector<u32>, vector<u32>, vector<u32>> elements_data;
+  auto &[nodes, sizes, elems, nums] = elements_data;
 
   auto elem_available = [&]() {
-    auto &[nodes, sizes, elems] = elements_data;
+    auto &[nodes, sizes, elems, nums] = elements_data;
     return !nodes.empty() && !sizes.empty() && !elems.empty();
   };
 
   auto help = [&]() {
     auto &[label, bar_label, units, patches, frames] = data;
-    auto &[nodes, sizes, elems] = elements_data;
+    auto &[nodes, sizes, elems, nums] = elements_data;
 
     cout <<
         R"(
@@ -405,7 +405,8 @@ a - Analyze patch data.)";
       break;
     case 'Y':
       if (elem_available()) {
-        auto [polygon_sizes, polygon_indices] = get_polygon(sizes, elems);
+        auto [polygon_sizes, polygon_indices, _0, _1] =
+            get_polygon<false, false>(sizes, elems, {});
         visualize_polygons(nodes, polygon_sizes, polygon_indices);
       } else
         goto CMDNF;
@@ -415,7 +416,7 @@ a - Analyze patch data.)";
       print_header(cout, label, bar_label, units);
     } break;
     case 'a': {
-      analyze(patches, frames, nodes, sizes, elems);
+      analyze(patches, frames, nodes, sizes, elems, nums);
     } break;
     case 'f': {
       if (!frames.empty())

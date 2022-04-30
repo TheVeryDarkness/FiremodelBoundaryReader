@@ -17,9 +17,9 @@ using std::to_string;
 using std::filesystem::absolute;
 using std::filesystem::path;
 
-template <size_t ParameterCount, bool withSize, size_t SizeAt>
-static inline tuple<vector<u32>, u32> read_element_in_apdl(istream &in,
-                                                           u32 ei) {
+template <size_t ParameterCount, bool withSize, size_t SizeAt, size_t NumberAt>
+static inline tuple<vector<u32>, u32, u32> read_element_in_apdl(istream &in,
+                                                                u32 ei) {
   static_assert(SizeAt < ParameterCount);
   u32 unknown[ParameterCount] = {};
   for (auto &u : unknown)
@@ -39,7 +39,7 @@ static inline tuple<vector<u32>, u32> read_element_in_apdl(istream &in,
       }
       n--;
     }
-    return {std::move(indices), size};
+    return {std::move(indices), size, unknown[NumberAt]};
   } else {
     vector<u32> indices = {};
     while (true) {
@@ -58,23 +58,25 @@ static inline tuple<vector<u32>, u32> read_element_in_apdl(istream &in,
     }
     assert(indices.size() <= numeric_limits<u32>::max());
     const u32 size = (u32)indices.size();
-    return {std::move(indices), size};
+    return {std::move(indices), size, unknown[NumberAt]};
   }
 }
 
 /// @brief Read from mapdl file.
 /// @param in: Stream that reads from mapdl file.
 /// @return Nodes coordinates, vertex count, element vertex indices.
-template <bool readNodes, bool readElements>
+template <bool readNodes, bool readElements, bool readElementNumbers>
 static inline tuple<conditional_t<readNodes, vector<float>, tuple<>>,
                     tuple<conditional_t<readElements, vector<u32>, tuple<>>,
-                          conditional_t<readElements, vector<u32>, tuple<>>>>
+                          conditional_t<readElements, vector<u32>, tuple<>>>,
+                    conditional_t<readElementNumbers, vector<u32>, tuple<>>>
 read_mapdl(istream &in) {
   tuple<conditional_t<readNodes, vector<float>, tuple<>>,
         tuple<conditional_t<readElements, vector<u32>, tuple<>>,
-              conditional_t<readElements, vector<u32>, tuple<>>>>
+              conditional_t<readElements, vector<u32>, tuple<>>>,
+        conditional_t<readElementNumbers, vector<u32>, tuple<>>>
       res;
-  auto &[nodes, size_and_element] = res;
+  auto &[nodes, size_and_element, numbers] = res;
   auto &[vertex_count, elements] = size_and_element;
 
   while (in.peek() != char_traits<char>::eof() && in) {
@@ -127,17 +129,22 @@ read_mapdl(istream &in) {
 
           assert(vertex_count.size() <= numeric_limits<u32>::max());
           if (third == "solid") {
-            auto [indices, size] =
-                read_element_in_apdl<11, true, 8>(in, (u32)vertex_count.size());
+            auto [indices, size, number] =
+                read_element_in_apdl<11, true, 8, 10>(in,
+                                                      (u32)vertex_count.size());
             for (auto n : indices)
               elements.push_back(n);
             vertex_count.push_back(size);
+            if constexpr (readElementNumbers)
+              numbers.push_back(number);
           } else {
-            auto [indices, size] =
-                read_element_in_apdl<5, false, 0>(in, (u32)vertex_count.size());
+            auto [indices, size, number] = read_element_in_apdl<5, false, 0, 0>(
+                in, (u32)vertex_count.size());
             for (auto n : indices)
               elements.push_back(n);
             vertex_count.push_back(size);
+            if constexpr (readElementNumbers)
+              numbers.push_back(number);
           }
         }
       }
@@ -154,8 +161,8 @@ read_mapdl(istream &in) {
 }
 
 static inline void write_table(
-    ostream &o, const path &directory, const char *name, u32 surface_index,
-    vector<u32>::const_iterator surface_indices_begin,
+    ostream &o, const path &directory, const char *name, u32 element_number,
+    u32 surface_number, vector<u32>::const_iterator surface_indices_begin,
     vector<u32>::const_iterator surface_indices_end,
     const vector<frame> &frames, vector<float>::const_iterator vec_begin,
     vector<float>::const_iterator vec_end) {
@@ -166,7 +173,9 @@ static inline void write_table(
   if (all_of(vec_begin, vec_end, [](float data) { return data == 0.0f; }))
     return;
 
-  auto p = directory / path(to_string(surface_index)).replace_extension(ext);
+  auto p = directory /
+           path(to_string(element_number) + '_' + to_string(surface_number))
+               .replace_extension(ext);
   ofstream tout;
   tout.open(p);
   assert(tout);
@@ -181,16 +190,13 @@ static inline void write_table(
 
 #pragma omp critical
   {
-    o << "*DIM," << name << surface_index + 1 << ",TABLE," << frames.size()
-      << ",1,1,TIME,\n";
-    o << "*TREAD," << name << surface_index + 1 << "," << surface_index
-      << ",txt," << absolute(directory).generic_string() << ",1\n";
-    o << "NSEL,NONE,,,\n";
-    for (; surface_indices_begin != surface_indices_end;
-         ++surface_indices_begin) {
-      auto index = *surface_indices_begin;
-      o << "NSEL,A,NODE,," << index + 1 << '\n';
-    }
-    o << "SF,ALL," << name << ",%" << name << surface_index + 1 << "%\n";
+    o << "*DIM," << name << element_number << '_' << surface_number << ",TABLE,"
+      << frames.size() << ",1,1,TIME,\n";
+    o << "*TREAD," << name << element_number << '_' << surface_number << ','
+      << element_number << '_' << surface_number << ",txt,"
+      << absolute(directory).generic_string() << ",1\n";
+    o << "ESEL,S,,," << element_number << "\n";
+    o << "SFE,ALL," << surface_number << ',' << name << ",%" << name
+      << element_number << '_' << surface_number << "%\n";
   }
 }

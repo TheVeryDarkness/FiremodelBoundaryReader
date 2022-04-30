@@ -148,7 +148,7 @@ a - ANSYS mapdl file.
     if (!opt_apdl)
       return {};
     auto in = ifstream(opt_apdl.value());
-    auto [nodes, _] = read_mapdl<true, false>(in);
+    auto [nodes, _0, _1] = read_mapdl<true, false, false>(in);
     return std::move(nodes);
   } break;
   default:
@@ -159,7 +159,7 @@ a - ANSYS mapdl file.
 /// @brief Read nodes and elements data from user-selected files.
 /// @return Tuple that contains nodes coordinates, vertices counts, vertex
 /// indices.
-static inline tuple<vector<float>, vector<u32>, vector<u32>>
+static inline tuple<vector<float>, vector<u32>, vector<u32>, vector<u32>>
 read_nodes_and_elements() {
   char opt0 = 'd';
   cout << R"(
@@ -179,7 +179,7 @@ a - ANSYS mapdl file.
     auto in_elems = ifstream(opt_elems.value());
     auto nodes = read_standard_nodes(in_nodes);
     auto [elems, sizes] = read_standard_elements(in_elems);
-    return {std::move(nodes), std::move(sizes), std::move(elems)};
+    return {std::move(nodes), std::move(sizes), std::move(elems), {}};
   }
   case 'a': {
     auto opt_apdl =
@@ -187,7 +187,8 @@ a - ANSYS mapdl file.
     if (!opt_apdl)
       return {};
     auto in = ifstream(opt_apdl.value());
-    auto &&[nodes, size_and_elements] = read_mapdl<true, true>(in);
+    auto &&[nodes, size_and_elements, numbers] =
+        read_mapdl<true, true, true>(in);
     auto &&[size, elemements] = std::move(size_and_elements);
 
     cout
@@ -212,7 +213,8 @@ a - ANSYS mapdl file.
       write_standard_elements(out_elems, size, elemements);
       out_elems.close();
     }
-    return {nodes, size, elemements};
+    return {std::move(nodes), std::move(size), std::move(elemements),
+            std::move(numbers)};
   }
   default:
     return {};

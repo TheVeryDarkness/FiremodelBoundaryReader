@@ -6,44 +6,76 @@ using std::accumulate;
 using std::initializer_list;
 using std::map;
 
+// Thanks to https://www.mm.bme.hu/
+// I J K L M N O P Q R  S  T  U  V  W  X  Y  Z  A  B
+// 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19
+// 4
+// face 1 (J-I-K)
+// face 2 (I-J-L)
+// face 3 (J-K-L)
+// face 4 (K-I-L)
+// 1 0 2
+// 0 1 3
+// 1 2 3
+// 2 0 3
+// 8
+// face 1 (J-I-L-K)
+// face 2 (I-J-N-M)
+// face 3 (J-K-O-N)
+// face 4 (K-L-P-O)
+// face 5 (L-I-M-P)
+// face 6 (M-N-O-P)
+// 1 0 3 2
+// 0 1 4 5
+// 1 2 6 5
+// 2 3 7 6
+// 3 0 4 5
+// 4 5 6 7
+// 10
+// face 1 (J-M-I-O-K-N)
+// face 2 (I-M-J-Q-L-P)
+// face 3 (J-N-K-R-L-Q)
+// face 4 (K-O-I-P-L-R)
+// 1 4 0 6 2 5
+// 0 4 1 8 3 7
+// 1 5 2 9 3 8
+// 2 6 0 7 3 9
+// 20
+// face 1 (J-Q-I-T-L-S-K-R)
+// face 2 (I-Q-J-Z-N-U-M-Y)
+// face 3 (J-R-K-A-O-V-N-Z)
+// face 4 (K-S-L-B-P-W-O-A)
+// face 5 (L-T-I-Y-M-X-P-B)
+// face 6 (M-U-N-V-O-W-P-X)
+// 1  8 0 11 3 10 2  9
+// 0  8 1 17 5 12 4 16
+// 1  9 2 17 6 12 5 16
+// 2 10 3 19 7 14 6 18
+// 3 11 0 16 4 15 7 19
+// 4 12 5 13 6 14 7 15
+
 static inline const map<u32, tuple<u32, vector<u32>>> &get_element_polygons() {
   static map<u32, tuple<u32, vector<u32>>> element_polygons;
 
   if (element_polygons.empty()) {
-    // 0 3 2 1
-    // 4 5 6 7
-    // 0 1 5 4
-    // 2 3 7 6
-    // 1 2 6 5
-    // 3 0 4 7
-    initializer_list<u32> l8 = {0, 3, 2, 1, //
-                                4, 5, 6, 7, //
-                                0, 1, 5, 4, //
-                                2, 3, 7, 6, //
+    initializer_list<u32> l8 = {1, 0, 3, 2, //
+                                0, 1, 4, 5, //
                                 1, 2, 6, 5, //
-                                3, 0, 4, 7};
+                                2, 3, 7, 6, //
+                                3, 0, 4, 5, //
+                                4, 5, 6, 7};
     element_polygons.emplace(8, make_tuple(4, vector<u32>{l8}));
-    //  0 11  3 10  2  9  1  8
-    //  4 12  5 13  6 14  7 15
-    //  0  8  1 17  5 12  4 16
-    //  1  9  2 18  6 13  5 17
-    //  2 10  3 19  7 14  6 18
-    //  3 11  0 16  4 15  7 19
-    initializer_list<u32> l20 = {0, 11, 3, 10, 2, 9,  1, 8,  //
-                                 4, 12, 5, 13, 6, 14, 7, 15, //
+    initializer_list<u32> l20 = {1, 8,  0, 11, 3, 10, 2, 9,  //
                                  0, 8,  1, 17, 5, 12, 4, 16, //
-                                 1, 9,  2, 18, 6, 13, 5, 17, //
+                                 1, 9,  2, 17, 6, 12, 5, 16, //
                                  2, 10, 3, 19, 7, 14, 6, 18, //
-                                 3, 11, 0, 16, 4, 15, 7, 19};
+                                 3, 11, 0, 16, 4, 15, 7, 19, //
+                                 4, 12, 5, 13, 6, 14, 7, 15};
     element_polygons.emplace(20, make_tuple(8, vector<u32>{l20}));
-    // 0 4 1 8 3 7
-    // 1 5 2 9 3 8
-    // 2 6 0 7 3 9
-    // 0 6 2 5 1 4
-    initializer_list<u32> l10 = {0, 4, 1, 8, 3, 7, //
+    initializer_list<u32> l10 = {1, 4, 0, 6, 2, 5, //
+                                 0, 4, 1, 8, 3, 7, //
                                  1, 5, 2, 9, 3, 8, //
-                                 2, 6, 0, 7, 3, 9, //
-                                 0, 6, 2, 5, 1, 4};
+                                 2, 6, 0, 7, 3, 9};
     element_polygons.emplace(10, make_tuple(6, vector<u32>{l10}));
   }
   return element_polygons;
@@ -108,25 +140,43 @@ static inline const map<u32, vector<u32>> &get_element_triangles() {
   return element_frames;
 }
 
-static inline tuple<vector<u32>, vector<u32>>
-get_polygon(const vector<u32> &sizes, const vector<u32> &indices) {
+template <bool withElementSize, bool withElementNumber>
+static inline tuple<vector<u32>, vector<u32>,
+                    conditional_t<withElementSize, vector<u8>, tuple<>>,
+                    vector<u32>>
+get_polygon(const vector<u32> &sizes, const vector<u32> &indices,
+            conditional_t<withElementNumber, vector<u32>, tuple<>> number_map) {
   auto count = accumulate(sizes.begin(), sizes.end(), 0);
   assert(count == indices.size());
-  tuple<vector<u32>, vector<u32>> res;
-  auto &[polygon_sizes, polygon_indices] = res;
+  tuple<vector<u32>, vector<u32>,
+        conditional_t<withElementSize, vector<u8>, tuple<>>, vector<u32>>
+      res;
+  auto &[polygon_sizes, polygon_indices, element_sizes, element_numbers] = res;
   auto p = indices.begin();
   auto end = indices.end();
   auto &map = get_element_polygons();
+
+  u32 i_element = 0;
   for (auto sz : sizes) {
     assert(p < end);
     auto &[polygon_size, polygon_vertex_indices] = map.at(sz);
-    for (size_t i = 0; i < polygon_vertex_indices.size() / polygon_size; ++i)
+    for (size_t i = 0; i < polygon_vertex_indices.size() / polygon_size; ++i) {
       polygon_sizes.push_back(polygon_size);
+      if constexpr (withElementNumber) {
+        element_numbers.push_back(number_map[i_element]);
+      }
+    }
     for (auto polygon_vertex_index : polygon_vertex_indices) {
       assert(polygon_vertex_index < sz);
       polygon_indices.push_back(*(p + polygon_vertex_index));
     }
+    if constexpr (withElementSize) {
+      assert(polygon_vertex_indices.size() <
+             polygon_size * (numeric_limits<u8>::max() + 1U));
+      element_sizes.push_back(u8(polygon_vertex_indices.size() / polygon_size));
+    }
     p += sz;
+    ++i_element;
   }
   return res;
 }
