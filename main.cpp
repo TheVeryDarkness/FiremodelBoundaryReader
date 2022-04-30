@@ -397,6 +397,7 @@ a - Analyze patch data.)";
         visualize_patches_and_elements(nodes, sizes, elems, patches);
       } else
         goto CMDNF;
+      break;
     case 'R':
       if (elem_available()) {
         visualize_3d_elements(nodes, sizes, elems);
