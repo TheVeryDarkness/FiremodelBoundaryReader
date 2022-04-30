@@ -104,7 +104,7 @@ static inline bool cursor_enabled = false;
 static inline bool index_loop = false;
 static inline size_t current = 0;
 static inline size_t index_max = 0;
-static inline float key_move_sensity = 2.f;
+static inline float key_move_sensity = 10.f;
 
 static inline bool keyX[2] = {};
 static inline bool keyY[2] = {};
@@ -136,7 +136,7 @@ static inline void keyCameraMove(float deltaTime) {
     cameraMoveLeft(length);
   if (keyY[1] && !keyY[0])
     cameraMoveForward(length);
-  if (keyX[0] && !keyX[1])
+  if (keyY[0] && !keyY[1])
     cameraMoveBackward(length);
 }
 
@@ -818,13 +818,13 @@ void main() {
 )";
   const char *main_highlight = R"(
  if (highlighted == data) {
-  color = vec4(.8f, .1f, .0f, .6f);
+  color = vec4(.8f, .1f, .0f, .8f);
  } else {
-  color = vec4(.6f, .6f, .6f, .1f);
+  color = vec4(.6f, .6f, .6f, .3f);
  }
 )";
   const char *main_default_color = R"(
-  color = vec4(.6f, .6f, .6f, .1f);
+  color = vec4(.6f, .6f, .6f, .3f);
 )";
   const char *main_end = R"(
 }
@@ -849,7 +849,7 @@ in vec4 color;
 
 void main() {
  gl_FragColor = color;
- // gl_FragColor.a = gl_FragColor.a / (1 + gl_FragCoord.z / gl_FragCoord.w);
+ gl_FragColor.a = gl_FragColor.a * 128 / (127 + gl_FragCoord.z / gl_FragCoord.w);
 }
 )";
 
@@ -1044,11 +1044,11 @@ static inline int visualize_nodes(const vector<float> &nodes,
 }
 
 static inline int visualize_nodes(const vector<float> &nodes,
-                                  const vector<float> &data) {
-  float _max = *max_element(nodes.cbegin(), nodes.cend());
-  float ratio = _max == 0 ? 1 : 100 / _max;
+                                  const vector<float> &data,
+                                  const u32 frames_count) {
+  auto _max = max_element(nodes.cbegin(), nodes.cend());
+  float ratio = _max == nodes.cend() ? 1 : 100 / *_max;
 
-  const auto frames_count = data.size() * 3 / nodes.size();
   const auto nodes_count = nodes.size() / 3;
   assert(data.size() == frames_count * nodes_count);
   index_max = frames_count;
