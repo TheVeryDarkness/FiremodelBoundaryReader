@@ -715,7 +715,7 @@ static inline int visualize(GetData &&getData,
     deltaTime = currentFrame - lastFrame;
     lastFrame = currentFrame;
 
-    keyCameraMove((double)deltaTime);
+    keyCameraMove((float)deltaTime);
 
     if constexpr (refreshData < vertexAttributesCount) {
       auto refreshedData = getRefreshedData();
