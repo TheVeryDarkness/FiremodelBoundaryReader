@@ -2,9 +2,11 @@
 #include "types.hpp"
 #include <algorithm>
 #include <map>
+#include <numeric>
 using std::accumulate;
 using std::initializer_list;
 using std::map;
+using std::tuple;
 
 // Thanks to https://www.mm.bme.hu/
 // I J K L M N O P Q R  S  T  U  V  W  X  Y  Z  A  B

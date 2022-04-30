@@ -228,38 +228,9 @@ node_on_each_connected_patch_boundary(const vector<patch_info> &patches,
 
   check_border(patches, nodes);
 
-  auto domains_vec = merge(patches);
+  auto regions = merge(patches);
 
-  set<u32> current;
-  for (const auto &domains : domains_vec) {
-    for (const auto &domain : domains) {
-      float x1 =
-          mesh.x0 + domain.I1 * mesh.cell_size - mesh.cell_size * tolerance;
-      float x2 =
-          mesh.x0 + domain.I2 * mesh.cell_size + mesh.cell_size * tolerance;
-      float y1 =
-          mesh.y0 + domain.J1 * mesh.cell_size - mesh.cell_size * tolerance;
-      float y2 =
-          mesh.y0 + domain.J2 * mesh.cell_size + mesh.cell_size * tolerance;
-      float z1 =
-          mesh.z0 + domain.K1 * mesh.cell_size - mesh.cell_size * tolerance;
-      float z2 =
-          mesh.z0 + domain.K2 * mesh.cell_size + mesh.cell_size * tolerance;
-
-      u32 i = 0;
-      for (auto p = nodes.begin(), end = nodes.end(); p != end;) {
-        float x = *p++;
-        float y = *p++;
-        float z = *p++;
-        if (in_box(x, y, z, x1, x2, y1, y2, z1, z2)) {
-          current.insert(i);
-        }
-        ++i;
-      }
-    }
-    res.push_back(std::move(current));
-  }
-  return res;
+  return regions.filter_for_each_connected_region(nodes);
 }
 
 static inline vector<u32> primitive_on_boundary(
@@ -429,11 +400,6 @@ static inline void find(const u32 i1, const u32 i2, const u32 j1, const u32 j2,
 
 static inline float average(const vector<u32> &vec) {
   return (accumulate(vec.begin(), vec.end(), 0.f) / vec.size());
-}
-
-template <typename Ty> static inline bool all_same(const vector<Ty> &vec) {
-  return all_of(vec.begin(), vec.end(),
-                [&vec](auto v) { return v == vec.front(); });
 }
 
 /// @return Polygon surface number and polygon average

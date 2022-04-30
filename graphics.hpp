@@ -385,7 +385,7 @@ create_shader_program(initializer_list<const char *> vertexShaderSource,
 }
 
 static bool fullScreen = false;
-static bool wireframe = false;
+static bool wireframe = true;
 
 /// @retval Start visualization or discard.
 static inline bool visualization_settings() {
@@ -879,6 +879,18 @@ static inline float patch_far(const vector<patch_info> &patches) {
   return far;
 }
 
+static inline float region_far(const regions &regions) {
+  constexpr auto u32_max = numeric_limits<u32>::max();
+  auto [I1, I2, J1, J2, K1, K2] = regions.minmax();
+  float far = 100.;
+  u32 I, J, K;
+  I = I2 - I1;
+  J = J2 - J1;
+  K = K2 - K1;
+  far = max(far, float(sqrt(I * I + J * J + K * K) * 5));
+  return far;
+}
+
 constexpr static inline float defaultNear = .01f;
 constexpr static inline float defaultFar = 1000.f;
 
@@ -900,6 +912,24 @@ static inline int visualize_patch(const vector<patch_info> &patches) {
          vertexShaderSource.highlight, vertexShaderSource.main_begin,
          vertexShaderSource.main_highlight, vertexShaderSource.main_end},
         {fragmentShaderSource}, type_list<GLuint[3], GLuint>{});
+  }
+}
+static inline int visualize_regions(const regions &rgns) {
+
+  while (true) {
+    if (!visualization_settings())
+      return 0;
+
+    visualize<GLuint, 1>(
+        [&rgns]() { return from_patches(rgns, wireframe); }, nullptr,
+        [&rgns]() -> tuple<float, float> {
+          return {defaultNear, region_far(rgns)};
+        },
+        defaultDrawMode, nullptr, nullptr,
+        {vertexShaderSource.head_pos_pv_color, vertexShaderSource.data,
+         vertexShaderSource.highlight, vertexShaderSource.main_begin,
+         vertexShaderSource.main_highlight, vertexShaderSource.main_end},
+        {fragmentShaderSource}, type_list<GLuint[3]>{});
   }
 }
 static inline int visualize_frames(const vector<patch_info> &patches,

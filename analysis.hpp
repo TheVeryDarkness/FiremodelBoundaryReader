@@ -496,6 +496,21 @@ d - Discard.
       if (n != 0)
         print_patch(data, m, n);
     } break;
+    case 'A':
+      if (!patches.empty() && elem_avail()) {
+        auto &[_, centroid, boundary_data] = calculate_average();
+        if (centroid.empty() || boundary_data.empty()) {
+          cerr << "No surfaces on boundary found\n";
+          break;
+        }
+        visualize_nodes(centroid, boundary_data, frames.size());
+      }
+      break;
+    case 'M':
+      if (!patches.empty() && elem_avail()) {
+        visualize_regions(merge(patches));
+      }
+      break;
 #endif // GRAPHICS_ENABLED
     case 'P': {
       u16 precision = input_precision();
@@ -559,16 +574,6 @@ d - Discard.
       }
       out << "FINISH" << endl << "/SOLU" << endl << "ALLSEL,ALL" << endl;
     } break;
-    case 'A':
-      if (!patches.empty() && elem_avail()) {
-        auto &[_, centroid, boundary_data] = calculate_average();
-        if (centroid.empty() || boundary_data.empty()) {
-          cerr << "No surfaces on boundary found\n";
-          break;
-        }
-        visualize_nodes(centroid, boundary_data, frames.size());
-      }
-      break;
     case 'S': {
       size_t dimension = -1;
       cin >> dimension;
