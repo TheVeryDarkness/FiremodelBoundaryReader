@@ -354,7 +354,8 @@ C - Save current result as CSV file.)";
 
     if (!patches.empty())
       cout << R"(
-s - Select a patch.)";
+s - Select a patch.
+M - Visualize merged patches.)";
 
 #if GRAPHICS_ENABLED
     if (!patches.empty() && elem_avail())
@@ -503,11 +504,12 @@ d - Discard.
           cerr << "No surfaces on boundary found\n";
           break;
         }
-        visualize_nodes(centroid, boundary_data, frames.size());
+        assert(frames.size() <= numeric_limits<u32>::max());
+        visualize_nodes(centroid, boundary_data, (u32)frames.size());
       }
       break;
     case 'M':
-      if (!patches.empty() && elem_avail()) {
+      if (!patches.empty()) {
         visualize_regions(merge(patches));
       }
       break;
@@ -516,64 +518,72 @@ d - Discard.
       u16 precision = input_precision();
       set_default_precision(precision);
     } break;
-    case 'l': {
-      auto opt1 = request_file_by_name([](const path &p) { return true; },
-                                       "APDL output");
-      auto opt2 = request_file_by_name([](const path &p) { return true; },
-                                       "APDL output directory");
-      if (!opt1)
-        break;
-      auto out = ofstream(opt1.value());
-      if (!out) {
-        cout << "Open Failed." << endl;
-      }
-      if (!opt2)
-        break;
-      auto &dir = opt2.value();
-      if (!exists(dir)) {
-        auto suc = create_directory(dir);
-        if (!suc) {
-          cout << "Create Failed." << endl;
+    case 'l':
+      if (!patches.empty() && !frames.empty() && elem_avail()) {
+        auto opt1 = request_file_by_name([](const path &p) { return true; },
+                                         "APDL output");
+        auto opt2 = request_file_by_name([](const path &p) { return true; },
+                                         "APDL output directory");
+        if (!opt1)
+          break;
+        auto out = ofstream(opt1.value());
+        if (!out) {
+          cout << "Open Failed." << endl;
         }
-      }
-      out << "/PREP7" << endl;
+        if (!opt2)
+          break;
+        auto &dir = opt2.value();
+        if (!exists(dir)) {
+          auto suc = create_directory(dir);
+          if (!suc) {
+            cout << "Create Failed." << endl;
+          }
+        }
+        out << "/PREP7" << endl;
 
-      const auto N = frames.size();
+        const auto N = frames.size();
 
-      auto &[_0, _1, element_numbers] = calculate_polygon_on_boundary();
-      auto &[on_boundary_surface_numbers, _2, boundary_data] =
-          calculate_average();
+        auto &[on_boundary_vertex_sizes, on_boundary_vertex_indices,
+               element_numbers] = calculate_polygon_on_boundary();
+        auto &[on_boundary_surface_numbers, _2, boundary_data] =
+            calculate_average();
 
-      vector<vector<u32>::const_iterator> ps;
-      ps.reserve(on_boundary_surface_numbers.size() + 1);
-      vector<vector<float>::const_iterator> Ps;
-      Ps.reserve(on_boundary_surface_numbers.size() + 1);
-      {
-        auto p = on_boundary_surface_numbers.begin();
-        auto e = on_boundary_surface_numbers.end();
-        auto P = boundary_data.begin();
-        auto E = boundary_data.end();
+        assert(on_boundary_surface_numbers.size() ==
+               on_boundary_vertex_sizes.size());
 
-        for (auto sz : on_boundary_surface_numbers) {
-          assert(p < e);
-          assert(P < E);
+        vector<vector<u32>::const_iterator> ps;
+        ps.reserve(on_boundary_surface_numbers.size() + 1);
+        vector<vector<float>::const_iterator> Ps;
+        Ps.reserve(on_boundary_surface_numbers.size() + 1);
+        {
+          auto p = on_boundary_vertex_indices.begin();
+          auto e = on_boundary_vertex_indices.end();
+          auto P = boundary_data.begin();
+          auto E = boundary_data.end();
+
+          for (auto sz : on_boundary_vertex_sizes) {
+            assert(p < e);
+            assert(P < E);
+            ps.push_back(p);
+            Ps.push_back(P);
+            p += sz;
+            P += N;
+          }
           ps.push_back(p);
           Ps.push_back(P);
-          p += 1;
-          P += N;
+          assert(p == e);
+          assert(P == E);
         }
-        ps.push_back(p);
-        Ps.push_back(P);
-      }
 
 #pragma omp parallel for schedule(dynamic, 5000)
-      for (long i = 0; i < on_boundary_surface_numbers.size(); ++i) {
-        write_table(out, opt2.value(), "HFLUX", element_numbers[i],
-                    on_boundary_surface_numbers[i], ps[i], ps[i + 1], frames,
-                    Ps[i], Ps[i + 1]);
+        for (long i = 0; i < on_boundary_vertex_sizes.size(); ++i) {
+          write_table(out, opt2.value(), "HFLUX", element_numbers[i],
+                      on_boundary_surface_numbers[i], ps[i], ps[i + 1], frames,
+                      Ps[i], Ps[i + 1]);
+        }
+        out << "FINISH" << endl << "/SOLU" << endl << "ALLSEL,ALL" << endl;
       }
-      out << "FINISH" << endl << "/SOLU" << endl << "ALLSEL,ALL" << endl;
-    } break;
+      break;
     case 'S': {
       size_t dimension = -1;
       cin >> dimension;

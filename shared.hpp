@@ -175,9 +175,8 @@ static inline set<u32> node_on_boundary(const vector<patch_info> &patches,
   return res;
 }
 
-static inline vector<set<u32>>
-node_on_each_patch_boundary(const vector<patch_info> &patches,
-                            const vector<float> &nodes) {
+static inline vector<set<u32>> [[deprecated]] node_on_each_patch_boundary(
+    const vector<patch_info> &patches, const vector<float> &nodes) {
   assert(nodes.size() % 3 == 0);
   assert(!nodes.empty());
   assert(!patches.empty());
@@ -276,6 +275,9 @@ static inline vector<u32> primitive_on_boundary(
   return res;
 }
 
+/// @brief
+/// @return Sizes of polygons, Indices of polygon vertices and polygon surface
+/// numbers
 template <bool withElementNumber>
 static inline tuple<vector<u32>, vector<u32>, vector<u32>> polygon_on_boundary(
     const vector<patch_info> &patches, const vector<float> &nodes,
@@ -402,7 +404,8 @@ static inline float average(const vector<u32> &vec) {
   return (accumulate(vec.begin(), vec.end(), 0.f) / vec.size());
 }
 
-/// @return Polygon surface number and polygon average
+/// @return Polygon surface number, polygon surface centroid positions and
+/// polygon average
 static inline tuple<vector<u32>, vector<float>, vector<float>> polygon_average(
     const vector<patch_info> &patches, const vector<float> &nodes,
     const vector<u8> &element_sizes, const vector<u32> &polygon_sizes,
@@ -418,7 +421,7 @@ static inline tuple<vector<u32>, vector<float>, vector<float>> polygon_average(
   tuple<vector<u32>, vector<float>, vector<float>> res;
   auto &[numbers, positions, data] = res;
 
-  auto _nodes = node_on_each_patch_boundary(patches, nodes);
+  auto _nodes = node_on_each_connected_patch_boundary(patches, nodes);
 
   constexpr float r = .01f;
 

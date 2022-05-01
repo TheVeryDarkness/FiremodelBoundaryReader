@@ -157,6 +157,9 @@ read_mapdl(istream &in) {
   if constexpr (readElements)
     if (elements.empty())
       cerr << "Elements definition not found" << endl;
+  if constexpr (readElementNumbers)
+    if (numbers.empty())
+      cerr << "Element numbers definition not found" << endl;
   return res;
 }
 
@@ -195,8 +198,19 @@ static inline void write_table(
     o << "*TREAD," << name << element_number << '_' << surface_number << ','
       << element_number << '_' << surface_number << ",txt,"
       << absolute(directory).generic_string() << ",1\n";
+#if 1
     o << "ESEL,S,,," << element_number << "\n";
-    o << "SFE,ALL," << surface_number << ',' << name << ",%" << name
+    o << "SFE,ALL," << surface_number + 1 << ',' << name << ",,%" << name
       << element_number << '_' << surface_number << "%\n";
+#else
+    o << "NSEL,NONE,,,\n";
+    for (; surface_indices_begin != surface_indices_end;
+         ++surface_indices_begin) {
+      auto index = *surface_indices_begin;
+      o << "NSEL,A,NODE,," << index + 1 << '\n';
+    }
+    o << "SF,ALL," << name << ",%" << name << element_number << '_'
+      << surface_number << "%\n";
+#endif // USE_SFE_LOADS
   }
 }

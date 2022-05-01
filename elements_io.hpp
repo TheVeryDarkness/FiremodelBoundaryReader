@@ -22,6 +22,7 @@ using std::isblank;
 using std::isspace;
 using std::istream;
 using std::map;
+using std::move;
 using std::ofstream;
 using std::string;
 using std::tuple;
@@ -67,6 +68,20 @@ read_standard_elements(istream &in) {
       }
       sizes.push_back(vertices_count);
     }
+    in >> ws;
+  }
+  return res;
+}
+
+/// @brief Read element numbers from stream associated with standard file.
+/// @param in: Stream associated with standard file.
+/// @return Numbers of Elements.
+static inline vector<u32> read_standard_element_numbers(istream &in) {
+  vector<u32> res;
+  while (in.peek() != char_traits<char>::eof() && in) {
+    u32 element_number = 0;
+    in >> element_number;
+    res.push_back(element_number);
     in >> ws;
   }
   return res;
@@ -122,6 +137,13 @@ static inline void write_standard_elements(ostream &out,
   }
 }
 
+static inline void write_standard_element_numbers(ostream &out,
+                                                  const vector<u32> &numbers) {
+  for (auto &number : numbers) {
+    out << number << ' ' << '\n';
+  }
+}
+
 /// @brief Read nodes and elements data from user-selected files.
 /// @return Tuple that contains nodes coordinates, vertices counts, vertex
 /// indices.
@@ -173,13 +195,17 @@ a - ANSYS mapdl file.
         request_file_by_name([](const path &p) { return exists(p); }, "nodes");
     auto opt_elems = request_file_by_name(
         [](const path &p) { return exists(p); }, "elements");
-    if (!opt_nodes || !opt_elems)
+    auto opt_nums = request_file_by_name(
+        [](const path &p) { return exists(p); }, "element numbers");
+    if (!opt_nodes || !opt_elems || !opt_nums)
       return {};
     auto in_nodes = ifstream(opt_nodes.value());
     auto in_elems = ifstream(opt_elems.value());
+    auto in_nums = ifstream(opt_nums.value());
     auto nodes = read_standard_nodes(in_nodes);
     auto [elems, sizes] = read_standard_elements(in_elems);
-    return {std::move(nodes), std::move(sizes), std::move(elems), {}};
+    auto numbers = read_standard_element_numbers(in_nums);
+    return {move(nodes), move(sizes), move(elems), move(numbers)};
   }
   case 'a': {
     auto opt_apdl =
@@ -201,8 +227,10 @@ a - ANSYS mapdl file.
           request_file_by_name([](const path &p) { return true; }, "nodes");
       auto opt_elems =
           request_file_by_name([](const path &p) { return true; }, "elements");
+      auto opt_nums = request_file_by_name([](const path &p) { return true; },
+                                           "element numbers");
 
-      if (!opt_nodes || !opt_elems)
+      if (!opt_nodes || !opt_elems || !opt_nums)
         return {};
 
       auto out_nodes = ofstream(opt_nodes.value());
@@ -211,6 +239,10 @@ a - ANSYS mapdl file.
 
       auto out_elems = ofstream(opt_elems.value());
       write_standard_elements(out_elems, size, elemements);
+      out_elems.close();
+
+      auto out_nums = ofstream(opt_nums.value());
+      write_standard_element_numbers(out_nums, numbers);
       out_elems.close();
     }
     return {std::move(nodes), std::move(size), std::move(elemements),

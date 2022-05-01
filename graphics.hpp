@@ -605,6 +605,7 @@ static inline int visualize(GetData &&getData,
   glEnable(GL_BLEND);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
   glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+  // glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
   DETECT_ERROR;
 
@@ -801,7 +802,7 @@ void main() {
  float rg = 2000;
  float rb = 1200;
  float ti = 2;
- float wave_length = 660 - 260 * (data - min) / (max - min);
+ float wave_length = 630 - 230 * (data - min) / (max - min);
  if (min == max) {
   color = vec4(1, 1, 1, .6f);
  } else {

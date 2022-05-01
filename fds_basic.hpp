@@ -322,6 +322,7 @@ public:
   constexpr patch_region(u32 P1, u32 P2, u32 Q1, u32 Q2) noexcept
       : P1(P1), P2(P2), Q1(Q1), Q2(Q2) {}
   explicit constexpr patch_region() noexcept : patch_region(0, 0, 0, 0) {}
+  constexpr patch_region(const patch_region &) noexcept = default;
   constexpr static patch_region from_patch(const patch_info &patch) {
     switch (patch.IOR) {
     case 1:
@@ -346,6 +347,7 @@ public:
     case 1:
       return {Q1, Q2};
     default:
+      static_assert(i == 0 || i == 1);
       assert(false);
       return {0, numeric_limits<u32>::max()};
     }
@@ -354,79 +356,80 @@ public:
   static bool xor_range(u32 x, u32 x1, u32 x2, u32 X1, u32 X2) {
     return in_range(x, x1, x2) ^ in_range(x, X1, X2);
   }
-  template <size_t dim>
-  bitset<3> cross(const patch_region &p, const array<u32, 4> &x) {
-    auto [x1, x2] = border<dim>();
-    auto [X1, X2] = p.border<dim>();
-    const auto X = [=](u32 _0, u32 _1) -> bool {
-      return xor_range(_0 + _1, x1 * 2, x2 * 2, X1 * 2, X2 * 2);
-    };
-    bitset<3> res;
-    res.set(0, X(x[0], x[1]));
-    res.set(1, X(x[1], x[2]));
-    res.set(2, X(x[2], x[3]));
+  bitset<9> cross(const array<u32, 4> &P, const array<u32, 4> &Q) const {
+    bitset<9> res;
+    for (size_t i = 0; i < 3; ++i)
+      if (P1 * 2 <= P[i] + P[i + 1] && P[i] + P[i + 1] <= P2 * 2)
+        for (size_t j = 0; j < 3; ++j)
+          if (Q1 * 2 <= Q[j] + Q[j + 1] && Q[j] + Q[j + 1] <= Q2 * 2)
+            res[i * 3 + j] = true;
+
     return res;
   }
-  array<patch_region, 4> cross(const patch_region &p) {
+  [[nodiscard]] array<patch_region, 4> cross(const patch_region &p) const {
     array<patch_region, 4> res = {patch_region{}, patch_region{},
                                   patch_region{}, patch_region{}};
     array<u32, 4> x = {P1, P2, p.P1, p.P2};
     sort(x.begin(), x.end());
     array<u32, 4> y = {Q1, Q2, p.Q1, p.Q2};
     sort(y.begin(), y.end());
-    bitset<3> X = cross<0>(p, x);
-    bitset<3> Y = cross<1>(p, y);
-    size_t count = 0;
+    bitset<9> a = cross(x, y);
+    bitset<9> b = p.cross(x, y);
+    bitset<9> c = a | b;
 
+    size_t count = 0;
     const auto _push = [&count, &res](u32 x1, u32 x2, u32 y1, u32 y2) {
       assert(count < 4);
       res[count] = {x1, x2, y1, y2};
+      assert(res[count].legal());
       ++count;
     };
     for (size_t i = 0; i < 3; ++i)
-      if (X[i])
-        if (Y[0] && Y[1] && Y[2])
+      if (x[i] != x[i + 1])
+        if (c[3 * i] && c[3 * i + 1] && c[3 * i + 2])
           _push(x[i], x[i + 1], y[0], y[3]);
-        else if (Y[0] && Y[1])
+        else if (c[3 * i] && c[3 * i + 1])
           _push(x[i], x[i + 1], y[0], y[2]);
-        else if (Y[1] && Y[2])
+        else if (c[3 * i + 1] && c[3 * i + 2])
           _push(x[i], x[i + 1], y[1], y[3]);
         else
           for (size_t j = 0; j < 3; ++j)
-            if (Y[j]) {
-              assert(X[i] != X[i + 1] && Y[j] != Y[j + 1]);
-              _push(X[i], X[i + 1], Y[j], Y[j + 1]);
+            if (c[3 * i + j]) {
+              _push(x[i], x[i + 1], y[j], y[j + 1]);
             }
     return res;
   }
-  constexpr bool merge(const patch_region &p) {
-    auto [x1, x2] = border<0>();
-    auto [y1, y2] = border<1>();
-    auto [X1, X2] = p.border<0>();
-    auto [Y1, Y2] = p.border<1>();
-    if (x1 == X1 && x2 == X2) {
-      if (y1 == Y2) {
-        y1 = Y1;
+  /// @brief Merge another region with this. Changes are made only if true is
+  /// returned.
+  /// @param p
+  /// @return Whether successfully merged.
+  [[nodiscard]] constexpr bool merge(const patch_region &p) {
+    auto [p1, p2] = p.border<0>();
+    auto [q1, q2] = p.border<1>();
+    if (P1 == p1 && P2 == P2) {
+      if (Q1 == q2) {
+        Q1 = q1;
         return true;
       }
-      if (y2 == Y1) {
-        y2 = Y2;
+      if (Q2 == q1) {
+        Q2 = q2;
         return true;
       }
     }
-    if (y1 == Y1 && y2 == Y2) {
-      if (x1 == X2) {
-        x1 = X1;
+    if (Q1 == q1 && Q2 == q2) {
+      if (P1 == p2) {
+        P1 = p1;
         return true;
       }
-      if (x2 == X1) {
-        x2 = X2;
+      if (P2 == p1) {
+        P2 = p2;
         return true;
       }
     }
     return false;
   }
 
+  /// @brief Check if one region is near another
   constexpr bool near(const patch_region &p) const {
     auto [x1, x2] = border<0>();
     auto [y1, y2] = border<1>();
@@ -444,44 +447,92 @@ public:
   constexpr bool contains(u32 p, u32 q) const noexcept {
     return P1 <= p && p <= P2 && Q1 <= q && q <= Q2;
   }
-  constexpr bool empty() const noexcept { return P1 == P2 || Q1 == Q2; }
+  /// @brief Check if one region intersects with another
+  /// @param that
+  /// @return
+  constexpr bool intersect(const patch_region &that) const noexcept {
+    return P1 < that.P2 && that.P1 < P2 && Q1 < that.Q2 && that.Q1 < Q2;
+  }
+  constexpr bool empty() const noexcept {
+    auto res = P1 == P2 || Q1 == Q2;
+    assert(!res || (P1 == 0 && P2 == 0));
+    return res;
+  }
+  constexpr bool legal() const noexcept { return !empty(); }
 
   constexpr tuple<u32, u32, u32, u32> minmax() const noexcept {
     return {P1, P2, Q1, Q2};
   }
+  /// @brief
+  /// @param p
+  /// @return Near; Changes made; fragments
+  [[nodiscard]] constexpr tuple<bool, bool, array<patch_region, 4>>
+  try_push(const patch_region &p) {
+    constexpr array<patch_region, 4> null = {patch_region{}, patch_region{},
+                                             patch_region{}, patch_region{}};
+
+    if (intersect(p)) {
+      auto &&c = cross(p);
+
+      if (!c[0].empty()) {
+        for (auto rp = c.rbegin(), re = c.rend(); rp != re; ++rp) {
+          if (!rp->empty()) {
+            *this = *rp;
+            *rp = patch_region{};
+            break;
+          }
+        }
+        return {false, true, c};
+      }
+      assert(c[0].empty());
+      assert(c[1].empty());
+      assert(c[2].empty());
+      assert(c[3].empty());
+    }
+    if (merge(p))
+      return {false, true, null};
+    if (near(p)) {
+      return {true, false, null};
+    }
+    return {false, false, null};
+  }
 };
+
+constexpr static array<patch_region, 4> null_region = {
+    patch_region{}, patch_region{}, patch_region{}, patch_region{}};
 
 struct connected_region {
   vector<patch_region> regions;
 
-  tuple<bool, array<patch_region, 4>> push(const patch_region &p) {
-    for (auto iter = regions.begin(); iter != regions.end(); ++iter) {
-      auto &region = *iter;
-      auto c = region.cross(p);
-      if (!c[0].empty()) {
-        regions.erase(iter);
-        return {false, c};
-      }
-      assert(c[1].empty());
-      assert(c[2].empty());
-      assert(c[3].empty());
-      if (region.merge(p))
-        return {true, c};
-      if (region.near(p))
+  /// @brief
+  /// @param p Patch region to merge
+  /// @return true if changes are made, region fragments are returned if only
+  /// changes are made
+  [[nodiscard]] tuple<bool, array<patch_region, 4>>
+  push(const patch_region &p) {
+    for (auto &region : regions) {
+      auto [near, suc, frags] = region.try_push(p);
+      if (suc)
+        return {suc, frags};
+      if (!suc)
+        assert(all_of(frags.begin(), frags.end(),
+                      [](const patch_region &pr) { return pr.empty(); }));
+      if (near) {
         regions.push_back(p);
+        return {true, null_region};
+      }
     }
-    return {false,
-            {patch_region{}, patch_region{}, patch_region{}, patch_region{}}};
+    return {false, null_region};
   }
+
   bool contains(u32 P, u32 Q) const noexcept {
     for (auto &reg : regions) {
       if (reg.contains(P, Q))
-        continue;
-      return false;
+        return true;
     }
-    return true;
+    return false;
   }
-  bool contains(const vector<u32> &P, const vector<u32> &Q) const noexcept {
+  bool contains_all(const vector<u32> &P, const vector<u32> &Q) const noexcept {
     assert(P.size() == Q.size());
     auto p1 = P.begin(), e1 = P.end();
     auto p2 = Q.begin(), e2 = Q.end();
@@ -489,14 +540,20 @@ struct connected_region {
     for (; p1 != e1; ++p1, ++p2) {
       assert(p2 != e2);
       for (auto &reg : regions) {
-        if (reg.contains(*p1, *p2))
-          continue;
-        return false;
+        if (!reg.contains(*p1, *p2))
+          return false;
       }
     }
     assert(p1 == e1 && p2 == e2);
     return true;
   }
+
+  bool legal() const {
+    return !empty() &&
+           all_of(regions.begin(), regions.end(),
+                  [](const patch_region &pr) { return !pr.empty(); });
+  }
+  bool empty() const { return regions.empty(); }
   tuple<u32, u32, u32, u32> minmax() const {
     auto [P1, P2, Q1, Q2] = regions.front().minmax();
     for (auto &cr : regions) {
@@ -508,6 +565,74 @@ struct connected_region {
     }
     return {P1, P2, Q1, Q2};
   }
+
+  [[nodiscard]] static bool insert(vector<patch_region> &fragments,
+                                   const array<patch_region, 4> &arr) {
+#ifndef NDEBUG
+    bool empty_found = false;
+    for (auto &f : arr)
+      if (!f.empty())
+        assert(!empty_found);
+      else
+        empty_found = true;
+#endif // !NDEBUG
+
+    bool not_empty = false;
+    for (auto &f : arr)
+      if (!f.empty()) {
+        fragments.push_back(f);
+        not_empty = true;
+      } else
+        break;
+    return not_empty;
+  }
+  void merge_fragments(vector<patch_region> &&fragments) {
+  RESTART:
+    for (auto p = fragments.cbegin(); p != fragments.cend(); ++p) {
+      auto &frag = *p;
+      auto &&[suc, frags] = push(frag);
+      if (insert(fragments, frags)) {
+        fragments.erase(p);
+        goto RESTART;
+      }
+    }
+    assert(fragments.empty());
+  }
+  void merge() {
+    vector<patch_region> fragments;
+  RESTART:
+    for (auto p1 = regions.begin(), e = regions.end(); p1 != e; ++p1) {
+      for (auto p2 = p1 + 1; p2 != e; ++p2) {
+        auto [near, suc, frags] = p1->try_push(*p2);
+        insert(fragments, frags);
+        if (suc) {
+          regions.erase(p2);
+          goto RESTART;
+        }
+      }
+    }
+    merge_fragments(std::move(fragments));
+  }
+  [[nodiscard]] bool merge(const connected_region &that) {
+    assert(that.legal());
+
+    bool changed = false;
+    vector<patch_region> fragments;
+
+    for (const auto &r : that.regions) {
+      auto &&[suc, frag] = push(r);
+      if (suc)
+        changed = true;
+      else {
+        assert(all_of(frag.cbegin(), frag.cend(),
+                      [](const patch_region &pr) { return pr.empty(); }));
+      }
+      insert(fragments, frag);
+    }
+    merge_fragments(std::move(fragments));
+
+    return changed;
+  }
 };
 
 struct connected_regions {
@@ -515,33 +640,34 @@ struct connected_regions {
 
   void push(const patch_region &p) {
     for (auto &region : regions) {
-      auto [suc, frag] = region.push(p);
-      if (suc) {
+      auto &&[suc, frag] = region.push(p);
+
+      if (!suc) {
         assert(frag[0].empty());
         assert(frag[1].empty());
         assert(frag[2].empty());
         assert(frag[3].empty());
+      } else {
+        for (auto &f : frag)
+          if (!f.empty())
+            push(f);
         return;
       }
-      for (auto &f : frag)
-        if (!frag.empty())
-          push(f);
     }
+    regions.push_back(connected_region{{p}});
   }
   void merge() {
   RESTART:
     for (auto p1 = regions.begin(), e = regions.end(); p1 != e; ++p1) {
       for (auto p2 = p1 + 1; p2 != e; ++p2) {
-        for (auto r = p2->regions.begin(); r != p2->regions.end(); ++r) {
-          auto [suc, frag] = p1->push(*r);
-          for (auto &f : frag)
-            if (!frag.empty())
-              push(f);
-          if (suc)
-            goto RESTART;
+        if (p1->merge(*p2)) {
+          regions.erase(p2);
+          goto RESTART;
         }
       }
     }
+    for (auto &cr : regions)
+      cr.merge();
   }
   bool in_single_connected_region(u32 P, u32 Q) {
     return any_of(
@@ -551,8 +677,14 @@ struct connected_regions {
   bool in_single_connected_region(const vector<u32> &P, const vector<u32> &Q) {
     return any_of(
         regions.cbegin(), regions.cend(),
-        [&P, &Q](const connected_region &cr) { return cr.contains(P, Q); });
+        [&P, &Q](const connected_region &cr) { return cr.contains_all(P, Q); });
   }
+  bool legal() const {
+    return !empty() &&
+           all_of(regions.begin(), regions.end(),
+                  [](const connected_region &pr) { return pr.legal(); });
+  }
+  bool empty() const { return regions.empty(); }
   tuple<u32, u32, u32, u32> minmax() const {
     auto [P1, P2, Q1, Q2] = regions.front().minmax();
     for (auto &cr : regions) {
@@ -581,7 +713,18 @@ class regions {
       m.emplace(R, connected_regions{{connected_region{{region}}}});
     } else {
       connected_regions &cr = p->second;
+      assert(cr.legal());
+#ifndef NDEBUG
+      auto copy = cr;
+      copy.push(region);
+      if (!copy.legal()) {
+        copy = cr;
+        copy.push(region);
+      }
+#endif // !NDEBUG
+
       cr.push(region);
+      assert(cr.legal());
     }
   }
 
@@ -839,5 +982,6 @@ static inline regions merge(const vector<patch_info> &patches) {
   for (auto &patch : patches) {
     res.push(patch);
   }
+  res.merge();
   return res;
 }
