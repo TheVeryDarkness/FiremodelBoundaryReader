@@ -175,47 +175,6 @@ static inline set<u32> node_on_boundary(const vector<patch_info> &patches,
   return res;
 }
 
-static inline vector<set<u32>> [[deprecated]] node_on_each_patch_boundary(
-    const vector<patch_info> &patches, const vector<float> &nodes) {
-  assert(nodes.size() % 3 == 0);
-  assert(!nodes.empty());
-  assert(!patches.empty());
-  vector<set<u32>> res;
-  res.resize(patches.size());
-
-  u32 i = 0;
-
-  check_border(patches, nodes);
-
-  for (auto p = nodes.begin(), end = nodes.end(); p != end;) {
-    float x = *p++;
-    float y = *p++;
-    float z = *p++;
-    size_t i_patch = 0;
-    for (const auto &patch : patches) {
-      float x1 =
-          mesh.x0 + patch.I1 * mesh.cell_size - mesh.cell_size * tolerance;
-      float x2 =
-          mesh.x0 + patch.I2 * mesh.cell_size + mesh.cell_size * tolerance;
-      float y1 =
-          mesh.y0 + patch.J1 * mesh.cell_size - mesh.cell_size * tolerance;
-      float y2 =
-          mesh.y0 + patch.J2 * mesh.cell_size + mesh.cell_size * tolerance;
-      float z1 =
-          mesh.z0 + patch.K1 * mesh.cell_size - mesh.cell_size * tolerance;
-      float z2 =
-          mesh.z0 + patch.K2 * mesh.cell_size + mesh.cell_size * tolerance;
-
-      if (in_box(x, y, z, x1, x2, y1, y2, z1, z2)) {
-        res[i_patch].insert(i);
-      }
-      ++i_patch;
-    }
-    ++i;
-  }
-  return res;
-}
-
 static inline vector<set<u32>>
 node_on_each_connected_patch_boundary(const vector<patch_info> &patches,
                                       const vector<float> &nodes) {
@@ -276,8 +235,7 @@ static inline vector<u32> primitive_on_boundary(
 }
 
 /// @brief
-/// @return Sizes of polygons, Indices of polygon vertices and polygon surface
-/// numbers
+/// @return Sizes of polygons, Indices of polygon vertices and element numbers
 template <bool withElementNumber>
 static inline tuple<vector<u32>, vector<u32>, vector<u32>> polygon_on_boundary(
     const vector<patch_info> &patches, const vector<float> &nodes,
@@ -288,7 +246,8 @@ static inline tuple<vector<u32>, vector<u32>, vector<u32>> polygon_on_boundary(
   assert(!patches.empty());
   auto sum = accumulate(polygon_sizes.begin(), polygon_sizes.end(), 0);
   assert(sum == polygon_indices.size());
-  assert(polygon_sizes.size() == element_index_map.size());
+  if constexpr (withElementNumber)
+    assert(polygon_sizes.size() == element_index_map.size());
   tuple<vector<u32>, vector<u32>, vector<u32>> res;
   auto &[sizes, indices, numbers] = res;
 
@@ -329,7 +288,12 @@ static inline tuple<vector<u32>, vector<u32>, vector<u32>> polygon_on_boundary(
       p += sz;
       ++i_polygon;
     }
+    assert(i_polygon == polygon_sizes.size());
+    assert(p == e);
   }
+  assert(accumulate(sizes.cbegin(), sizes.cend(), 0) == indices.size());
+  if constexpr (withElementNumber)
+    assert(numbers.size() == sizes.size());
   return res;
 }
 
@@ -406,10 +370,135 @@ static inline float average(const vector<u32> &vec) {
 
 /// @return Polygon surface number, polygon surface centroid positions and
 /// polygon average
-static inline tuple<vector<u32>, vector<float>, vector<float>> polygon_average(
+static inline tuple<vector<u8>, vector<float>, vector<float>> polygon_average(
     const vector<patch_info> &patches, const vector<float> &nodes,
     const vector<u8> &element_sizes, const vector<u32> &polygon_sizes,
     const vector<u32> &polygon_indices, const vector<frame> &frames) {
+  assert(nodes.size() % 3 == 0);
+  assert(!nodes.empty());
+  assert(!patches.empty());
+  size_t none = 0;
+  size_t degenerated = 0;
+  auto polygon_indices_count =
+      accumulate(polygon_sizes.begin(), polygon_sizes.end(), 0);
+  assert(polygon_indices_count == polygon_indices.size());
+  tuple<vector<u8>, vector<float>, vector<float>> res;
+  auto &[numbers, positions, data] = res;
+
+  auto _nodes = node_on_each_connected_patch_boundary(patches, nodes);
+
+  constexpr float r = .01f;
+
+  // data.reserve(frames.size() * polygon_indices.size());
+
+  // Take variables outside.
+  vector<float> sum;
+  vector<u32> polygon_vertex_indices;
+
+  u32 i_patch = 0;
+  // For the set of nodes on each connected region.
+  for (const auto &set : _nodes) {
+    auto &patch = patches[i_patch];
+    auto p = polygon_indices.begin();
+    auto e = polygon_indices.end();
+    auto P = element_sizes.begin();
+    auto E = element_sizes.end();
+
+    u8 i_surface = 0;
+    // For each polygon
+    for (auto sz : polygon_sizes) {
+      assert(p < e);
+      assert(P < E);
+      polygon_vertex_indices.clear();
+      polygon_vertex_indices.insert(polygon_vertex_indices.end(), p, p + sz);
+
+      bool in = true;
+      for (auto index : polygon_vertex_indices) {
+        if (!set_contains(set, index))
+          in = false;
+      }
+
+      if (in) {
+        const auto &[I, J, K] = mesh_coordinates(nodes, polygon_vertex_indices);
+
+        numbers.push_back(i_surface);
+        positions.push_back(average(I));
+        positions.push_back(average(J));
+        positions.push_back(average(K));
+
+        const auto [_i1, _i2] = minmax_element(I.cbegin(), I.cend());
+        const auto [_j1, _j2] = minmax_element(J.cbegin(), J.cend());
+        const auto [_k1, _k2] = minmax_element(K.cbegin(), K.cend());
+        auto i1 = *_i1;
+        auto i2 = *_i2;
+        auto j1 = *_j1;
+        auto j2 = *_j2;
+        auto k1 = *_k1;
+        auto k2 = *_k2;
+
+        sum.clear();
+        sum.resize(frames.size(), 0.f);
+        u32 count = 0;
+
+        switch (patches[i_patch].IOR) {
+        case 1:
+        case -1:
+          find<1, 2>(j1, j2, k1, k2, frames, i_patch, patch, J, K, sum, count);
+          break;
+        case 2:
+        case -2:
+          find<0, 2>(i1, i2, k1, k2, frames, i_patch, patch, I, K, sum, count);
+          break;
+        case 3:
+        case -3:
+          find<0, 1>(i1, i2, j1, j2, frames, i_patch, patch, I, J, sum, count);
+          break;
+        default:
+          assert(false);
+          break;
+        }
+
+        if (count > 0) {
+          for (auto &s : sum)
+            s /= count;
+        } else {
+          if (all_same(I) || all_same(J) || all_same(K))
+            ++degenerated;
+          else
+            ++none;
+        }
+
+        data.insert(data.end(), sum.cbegin(), sum.cend());
+      }
+
+      p += sz;
+      ++i_surface;
+      if (i_surface == *P) {
+        i_surface = 0;
+        ++P;
+      }
+    }
+    assert(p == e);
+    assert(P == E);
+
+    ++i_patch;
+  }
+  // data.shrink_to_fit();
+  if (degenerated)
+    clog << degenerated << " surfaces seem to be degenerated.\n";
+  if (none)
+    cerr << none
+         << " non-degenerated surfaces on boundary don't contain data "
+            "point.\n";
+  return res;
+}
+
+/// @return Polygon surface number, polygon surface centroid positions and
+/// polygon average
+static inline tuple<vector<u32>, vector<float>, vector<float>>
+node_data(const vector<patch_info> &patches, const vector<float> &nodes,
+          const vector<u8> &element_sizes, const vector<u32> &polygon_sizes,
+          const vector<u32> &polygon_indices, const vector<frame> &frames) {
   assert(nodes.size() % 3 == 0);
   assert(!nodes.empty());
   assert(!patches.empty());

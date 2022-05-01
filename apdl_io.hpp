@@ -65,7 +65,8 @@ static inline tuple<vector<u32>, u32, u32> read_element_in_apdl(istream &in,
 /// @brief Read from mapdl file.
 /// @param in: Stream that reads from mapdl file.
 /// @return Nodes coordinates, vertex count, element vertex indices.
-template <bool readNodes, bool readElements, bool readElementNumbers>
+template <bool readNodes, bool readElements, bool readElementNumbers,
+          bool skipContact>
 static inline tuple<conditional_t<readNodes, vector<float>, tuple<>>,
                     tuple<conditional_t<readElements, vector<u32>, tuple<>>,
                           conditional_t<readElements, vector<u32>, tuple<>>>,
@@ -79,11 +80,22 @@ read_mapdl(istream &in) {
   auto &[nodes, size_and_element, numbers] = res;
   auto &[vertex_count, elements] = size_and_element;
 
+  constexpr auto &start = "/wb,contact,start";
+  constexpr auto &end = "/wb,contact,end";
+
   while (in.peek() != char_traits<char>::eof() && in) {
     string trash;
     string line;
     getline(in, line);
     string_view l = line;
+
+    if constexpr (skipContact)
+      if (l.substr(0, sizeof(start) - 1) == start)
+        do {
+          getline(in, line);
+          l = line;
+        } while (l.substr(0, sizeof(end) - 1) != end);
+
     auto comma1 = l.find_first_of(",");
     if (comma1 == string_view::npos)
       continue;
@@ -199,9 +211,9 @@ static inline void write_table(
       << element_number << '_' << surface_number << ",txt,"
       << absolute(directory).generic_string() << ",1\n";
 #if 1
-    o << "ESEL,S,,," << element_number << "\n";
-    o << "SFE,ALL," << surface_number + 1 << ',' << name << ",,%" << name
-      << element_number << '_' << surface_number << "%\n";
+    // o << "ESEL,S,,," << element_number << "\n";
+    o << "SFE," << element_number << ',' << (surface_number + 1) << ',' << name
+      << ",,%" << name << element_number << '_' << surface_number << "%\n";
 #else
     o << "NSEL,NONE,,,\n";
     for (; surface_indices_begin != surface_indices_end;

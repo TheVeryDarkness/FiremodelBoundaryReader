@@ -291,6 +291,36 @@ static inline void analyze(const vector<patch_info> &patches,
     return polygons;
   };
 
+  // indices_of_nodes_on_boundary
+  set<u32> nodes_on_boundary;
+  bool nodes_on_boundary_calculated = false;
+  auto calculate_node_on_boundary = [
+    &nodes, &patches, &element_sizes, &element_indices, &nodes_on_boundary,
+    &calculate_polygon, &calculated = nodes_on_boundary_calculated
+  ]() -> const auto & {
+    if (!calculated) {
+      auto &[polygon_sizes, polygon_indices, _, element_numbers] =
+          calculate_polygon();
+      nodes_on_boundary = node_on_boundary(patches, nodes);
+      calculated = true;
+    }
+    return nodes_on_boundary;
+  };
+
+  tuple<vector<u32>, vector<float>, vector<float>> node_data;
+  bool node_data_calculated = false;
+  auto calculate_node = [
+        &calculated = node_data_calculated, &node_data, &calculate_polygon,
+        &calculate_node_on_boundary, &patches, &nodes, &frames
+  ]() -> const auto & {
+    auto &indices_of_node_on_boundary = calculate_node_on_boundary();
+    if (!calculated) {
+      ;
+      calculated = true;
+    }
+    return node_data;
+  };
+
   // sizes_of_polygon_vertices_on_boundary,
   // indices_of_polygon_vertices_on_boundary,
   // numbers_of_element_whose_polygon_on_boundary
@@ -314,22 +344,26 @@ static inline void analyze(const vector<patch_info> &patches,
     return polygons_on_boundary;
   };
 
-  tuple<vector<u32>, vector<float>, vector<float>> polygons_average;
+  // Polygon surface number, polygon surface centroid positions and polygon
+  // average
+  tuple<vector<u8>, vector<float>, vector<float>> polygons_average;
   bool average_calculated = false;
-  auto calculate_average = [
+  auto calculate_polygon_average = [
         &calculated = average_calculated, &polygons_average, &calculate_polygon,
         &calculate_polygon_on_boundary, &patches, &nodes, &frames
   ]() -> const auto & {
     auto &[polygon_sizes, polygon_indices, element_sizes, element_indices] =
         calculate_polygon();
+    /*
     auto &[sizes_of_polygon_vertices_on_boundary,
            indices_of_polygon_vertices_on_boundary,
            indices_of_element_whose_polygon_on_boundary] =
         calculate_polygon_on_boundary();
+        */
     if (!calculated) {
-      polygons_average = polygon_average(
-          patches, nodes, element_sizes, sizes_of_polygon_vertices_on_boundary,
-          indices_of_polygon_vertices_on_boundary, frames);
+      polygons_average =
+          polygon_average(patches, nodes, element_sizes, polygon_sizes,
+                          polygon_indices, frames);
     }
     return polygons_average;
   };
@@ -499,7 +533,7 @@ d - Discard.
     } break;
     case 'A':
       if (!patches.empty() && elem_avail()) {
-        auto &[_, centroid, boundary_data] = calculate_average();
+        auto &[_, centroid, boundary_data] = calculate_polygon_average();
         if (centroid.empty() || boundary_data.empty()) {
           cerr << "No surfaces on boundary found\n";
           break;
@@ -546,7 +580,7 @@ d - Discard.
         auto &[on_boundary_vertex_sizes, on_boundary_vertex_indices,
                element_numbers] = calculate_polygon_on_boundary();
         auto &[on_boundary_surface_numbers, _2, boundary_data] =
-            calculate_average();
+            calculate_polygon_average();
 
         assert(on_boundary_surface_numbers.size() ==
                on_boundary_vertex_sizes.size());
@@ -575,6 +609,7 @@ d - Discard.
           assert(P == E);
         }
 
+        assert(element_numbers.size() == on_boundary_surface_numbers.size());
 #pragma omp parallel for schedule(dynamic, 5000)
         for (long i = 0; i < on_boundary_vertex_sizes.size(); ++i) {
           write_table(out, opt2.value(), "HFLUX", element_numbers[i],

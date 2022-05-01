@@ -102,9 +102,9 @@ static inline double firstFrame = 0.0;
 
 static inline bool cursor_enabled = false;
 static inline bool index_loop = false;
-static inline size_t current = 0;
+static inline size_t &current = selected_patch;
 static inline size_t index_max = 0;
-static inline float key_move_sensity = 10.f;
+static inline float key_move_sensity = 4.f;
 
 static inline bool keyX[2] = {};
 static inline bool keyY[2] = {};
@@ -385,7 +385,7 @@ create_shader_program(initializer_list<const char *> vertexShaderSource,
 }
 
 static bool fullScreen = false;
-static bool wireframe = true;
+static bool wireframe = false;
 
 /// @retval Start visualization or discard.
 static inline bool visualization_settings() {

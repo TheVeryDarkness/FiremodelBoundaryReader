@@ -170,7 +170,7 @@ a - ANSYS mapdl file.
     if (!opt_apdl)
       return {};
     auto in = ifstream(opt_apdl.value());
-    auto [nodes, _0, _1] = read_mapdl<true, false, false>(in);
+    auto [nodes, _0, _1] = read_mapdl<true, false, false, true>(in);
     return std::move(nodes);
   } break;
   default:
@@ -214,7 +214,7 @@ a - ANSYS mapdl file.
       return {};
     auto in = ifstream(opt_apdl.value());
     auto &&[nodes, size_and_elements, numbers] =
-        read_mapdl<true, true, true>(in);
+        read_mapdl<true, true, true, true>(in);
     auto &&[size, elemements] = std::move(size_and_elements);
 
     cout
