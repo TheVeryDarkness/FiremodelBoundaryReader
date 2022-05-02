@@ -509,7 +509,6 @@ int main(int argc, char *argv[]) {
       }
     }
 
-    cerr << hex;
     process_file();
 
   } catch (const exception &e) {
