@@ -9,6 +9,7 @@
 #include <set>
 #include <tuple>
 
+using std::abs;
 using std::all_of;
 using std::any_of;
 using std::array;
@@ -25,6 +26,7 @@ using std::min;
 using std::min_element;
 using std::minmax_element;
 using std::numeric_limits;
+using std::pair;
 using std::set;
 using std::sort;
 using std::tuple;
@@ -101,7 +103,7 @@ struct patch_info {
     }
   }
 
-  template <size_t sz> tuple<u32, u32> border() const noexcept {
+  template <size_t sz> pair<u32, u32> border() const noexcept {
     switch (sz) {
     case 0:
       return {I1, I2};
@@ -730,27 +732,31 @@ class regions {
 
   template <size_t dim>
   vector<set<u32>>
-  filter_for_each_connected_region(const vector<u32> &P, const vector<u32> &Q,
-                                   const vector<u32> &R) const {
+  filter_for_each_connected_region(const vector<float> &P,
+                                   const vector<float> &Q,
+                                   const vector<float> &R) const {
     vector<set<u32>> res;
     u32 i_node = 0;
     auto &m = r[dim];
-    for (const auto &[r, crs] : m) {
+    for (const auto &[_r, crs] : m) {
       for (auto &cr : crs.regions) {
         set<u32> current;
         auto p1 = P.begin();
-        auto p2 = P.end();
+        const auto p2 = P.end();
         auto q1 = Q.begin();
-        auto q2 = Q.end();
+        const auto q2 = Q.end();
         auto r1 = R.begin();
-        auto r2 = R.end();
+        const auto r2 = R.end();
         u32 i_node = 0;
         for (; p1 != p2; ++p1, ++q1, ++r1, ++i_node) {
           assert(q1 != q2);
           assert(r1 != r2);
-          if (*r1 != r)
+          long r = lroundf(*r1);
+          if (out_of_tolerance(*r1, r) || r != _r)
             continue;
-          if (cr.contains(*p1, *q1))
+          long p = lroundf(*p1);
+          long q = lroundf(*q1);
+          if (cr.contains(p, q))
             current.insert(i_node);
         }
         res.push_back(std::move(current));
@@ -814,14 +820,14 @@ public:
 
   vector<set<u32>>
   filter_for_each_connected_region(const vector<float> &nodes) {
-    vector<u32> x, y, z;
+    vector<float> x, y, z;
     x.reserve(nodes.size() / 3);
     y.reserve(nodes.size() / 3);
     z.reserve(nodes.size() / 3);
     for (auto iter = nodes.begin(), end = nodes.end(); iter != end;) {
-      x.push_back(lroundf((*iter++ - mesh.x0) / mesh.cell_size));
-      y.push_back(lroundf((*iter++ - mesh.y0) / mesh.cell_size));
-      z.push_back(lroundf((*iter++ - mesh.z0) / mesh.cell_size));
+      x.push_back(((*iter++ - mesh.x0) / mesh.cell_size));
+      y.push_back(((*iter++ - mesh.y0) / mesh.cell_size));
+      z.push_back(((*iter++ - mesh.z0) / mesh.cell_size));
     }
 
     vector<set<u32>> res = filter_for_each_connected_region<0>(y, z, x);

@@ -197,14 +197,21 @@ a - ANSYS mapdl file.
         [](const path &p) { return exists(p); }, "elements");
     auto opt_nums = request_file_by_name(
         [](const path &p) { return exists(p); }, "element numbers");
-    if (!opt_nodes || !opt_elems || !opt_nums)
+    if (!opt_nodes || !opt_elems)
       return {};
+    if (!opt_nums)
+      clog << "Element numbers may not read.\n";
     auto in_nodes = ifstream(opt_nodes.value());
-    auto in_elems = ifstream(opt_elems.value());
-    auto in_nums = ifstream(opt_nums.value());
     auto nodes = read_standard_nodes(in_nodes);
+
+    auto in_elems = ifstream(opt_elems.value());
     auto [elems, sizes] = read_standard_elements(in_elems);
-    auto numbers = read_standard_element_numbers(in_nums);
+
+    vector<u32> numbers;
+    if (opt_nums) {
+      auto in_nums = ifstream(opt_nums.value());
+      numbers = read_standard_element_numbers(in_nums);
+    }
     return {move(nodes), move(sizes), move(elems), move(numbers)};
   }
   case 'a': {

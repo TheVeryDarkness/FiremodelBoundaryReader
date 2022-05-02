@@ -406,7 +406,7 @@ a - Analyze patch data.)";
       break;
     case 'Y':
       if (elem_available()) {
-        auto [polygon_sizes, polygon_indices, _0, _1] =
+        auto [polygon_sizes, polygon_indices, _0, _1, _2] =
             get_polygon<false, false>(sizes, elems, {});
         visualize_polygons(nodes, polygon_sizes, polygon_indices);
       } else

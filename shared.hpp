@@ -94,8 +94,6 @@ static inline bool in_box(float x, float y, float z, float x1, float x2,
   return x1 <= x && x <= x2 && y1 <= y && y <= y2 && z1 <= z && z <= z2;
 }
 
-static const float tolerance = .01f;
-
 static inline void check_border(const vector<patch_info> &patches,
                                 const vector<float> &nodes) {
   float xmin = nodes[0], xmax = nodes[0], ymin = nodes[1], ymax = nodes[1],
@@ -237,10 +235,13 @@ static inline vector<u32> primitive_on_boundary(
 /// @brief
 /// @return Sizes of polygons, Indices of polygon vertices and element numbers
 template <bool withElementNumber>
-static inline tuple<vector<u32>, vector<u32>, vector<u32>> polygon_on_boundary(
-    const vector<patch_info> &patches, const vector<float> &nodes,
-    const vector<u32> &polygon_sizes, const vector<u32> &polygon_indices,
-    const vector<u32> &element_index_map) {
+static inline tuple<vector<u32>, vector<u32>, vector<u32>, vector<u8>>
+polygon_on_boundary(const vector<patch_info> &patches,
+                    const vector<float> &nodes,
+                    const vector<u32> &polygon_sizes,
+                    const vector<u32> &polygon_indices,
+                    const vector<u32> &element_index_map,
+                    const vector<u8> &polygon_surface_numbers) {
   assert(nodes.size() % 3 == 0);
   assert(!nodes.empty());
   assert(!patches.empty());
@@ -248,8 +249,8 @@ static inline tuple<vector<u32>, vector<u32>, vector<u32>> polygon_on_boundary(
   assert(sum == polygon_indices.size());
   if constexpr (withElementNumber)
     assert(polygon_sizes.size() == element_index_map.size());
-  tuple<vector<u32>, vector<u32>, vector<u32>> res;
-  auto &[sizes, indices, numbers] = res;
+  tuple<vector<u32>, vector<u32>, vector<u32>, vector<u8>> res;
+  auto &[sizes, indices, numbers, load_keys] = res;
 
   auto _nodes = node_on_each_connected_patch_boundary(patches, nodes);
 
@@ -258,6 +259,8 @@ static inline tuple<vector<u32>, vector<u32>, vector<u32>> polygon_on_boundary(
   for (const auto &set : _nodes) {
     auto p = polygon_indices.begin();
     auto e = polygon_indices.end();
+    auto P = polygon_surface_numbers.begin();
+    auto E = polygon_surface_numbers.end();
 
     u32 i_polygon = 0;
     // For each polygon
@@ -283,13 +286,16 @@ static inline tuple<vector<u32>, vector<u32>, vector<u32>> polygon_on_boundary(
         if constexpr (withElementNumber)
           numbers.push_back(element_index_map[i_polygon]);
         sizes.push_back(sz);
+        load_keys.push_back(*P);
       }
 
       p += sz;
+      ++P;
       ++i_polygon;
     }
     assert(i_polygon == polygon_sizes.size());
     assert(p == e);
+    assert(P == E);
   }
   assert(accumulate(sizes.cbegin(), sizes.cend(), 0) == indices.size());
   if constexpr (withElementNumber)
@@ -297,37 +303,35 @@ static inline tuple<vector<u32>, vector<u32>, vector<u32>> polygon_on_boundary(
   return res;
 }
 
-static inline int_fast8_t sign(int_fast64_t i) {
-  return i > 0 ? 1 : i < 0 ? -1 : 0;
-}
+static inline int_fast8_t sign(float i) { return i > 0 ? 1 : i < 0 ? -1 : 0; }
 
-static inline bool inside(const vector<u32> &I, const vector<u32> &J, u32 i,
+static inline bool inside(const vector<float> &I, const vector<float> &J, u32 i,
                           u32 j) {
-  using i64f = int_fast64_t;
+  using T = float;
   uint_fast8_t last = [&I, &J, i, j]() {
-    i64f i1 = I.back();
-    i64f i2 = I.front();
-    i64f j1 = J.back();
-    i64f j2 = J.front();
+    T i1 = I.back();
+    T i2 = I.front();
+    T j1 = J.back();
+    T j2 = J.front();
     auto dir = (i2 - i1) * (j - j1) - (j2 - j1) * (i - i1);
     return sign(dir);
   }();
-  //  Pi+1Pi cross PPi
+  //  PiPi+1 cross PiP
   bool res = true;
   for (size_t index = 0; index + 1 < I.size(); ++index) {
-    i64f i1 = I[index];
-    i64f i2 = I[index + 1];
-    i64f j1 = J[index];
-    i64f j2 = J[index + 1];
+    T i1 = I[index];
+    T i2 = I[index + 1];
+    T j1 = J[index];
+    T j2 = J[index + 1];
     auto dir = (i2 - i1) * (j - j1) - (j2 - j1) * (i - i1);
     res = res && (sign(dir) * last >= 0);
   }
   return res;
 }
 
-static inline tuple<vector<u32>, vector<u32>, vector<u32>>
+static inline tuple<vector<float>, vector<float>, vector<float>>
 mesh_coordinates(const vector<float> &vec, const vector<u32> &indices) {
-  tuple<vector<u32>, vector<u32>, vector<u32>> res;
+  tuple<vector<float>, vector<float>, vector<float>> res;
   auto &[x, y, z] = res;
   for (auto i : indices) {
     x.push_back((vec[3 * i] - mesh.x0) / mesh.cell_size);
@@ -337,182 +341,104 @@ mesh_coordinates(const vector<float> &vec, const vector<u32> &indices) {
   return res;
 }
 
-template <size_t dim1, size_t dim2>
-static inline void find(const u32 i1, const u32 i2, const u32 j1, const u32 j2,
-                        const vector<frame> &frames, u32 i_patch,
-                        const patch_info &patch, const vector<u32> &I,
-                        const vector<u32> &J, vector<float> &sum, u32 &count) {
-  assert(count == 0);
-  assert(sum.size() == frames.size());
-  auto [I1, I2] = patch.border<dim1>();
-  auto [J1, J2] = patch.border<dim2>();
-  auto imin = max(I1, i1);
-  auto imax = min(I2, i2);
-  auto jmin = max(J1, j1);
-  auto jmax = min(J2, j2);
-  for (u32 i = imin; i <= imax; ++i) {
-    for (u32 j = jmin; j <= jmax; ++j) {
-      if (inside(I, J, i, j)) {
-        for (size_t index = 0; index < frames.size(); ++index) {
-          sum[index] += frames[index]
-                            .data[i_patch]
-                            .data[i - I1 + patch.length<dim1>() * (j - J1)];
-        }
-        count += 1;
-      }
-    }
+static inline tuple<vector<float>, vector<float>, vector<float>>
+round_all(const vector<float> &I, const vector<float> &J,
+          const vector<float> &K) {
+  tuple<vector<float>, vector<float>, vector<float>> res;
+  auto &[i, j, k] = res;
+  for (size_t index = 0; index < I.size(); ++index) {
+    i.push_back(floorf(I[index]));
+    j.push_back(floorf(J[index]));
+    k.push_back(floorf(K[index]));
   }
-}
-
-static inline float average(const vector<u32> &vec) {
-  return (accumulate(vec.begin(), vec.end(), 0.f) / vec.size());
-}
-
-/// @return Polygon surface number, polygon surface centroid positions and
-/// polygon average
-static inline tuple<vector<u8>, vector<float>, vector<float>> polygon_average(
-    const vector<patch_info> &patches, const vector<float> &nodes,
-    const vector<u8> &element_sizes, const vector<u32> &polygon_sizes,
-    const vector<u32> &polygon_indices, const vector<frame> &frames) {
-  assert(nodes.size() % 3 == 0);
-  assert(!nodes.empty());
-  assert(!patches.empty());
-  size_t none = 0;
-  size_t degenerated = 0;
-  auto polygon_indices_count =
-      accumulate(polygon_sizes.begin(), polygon_sizes.end(), 0);
-  assert(polygon_indices_count == polygon_indices.size());
-  tuple<vector<u8>, vector<float>, vector<float>> res;
-  auto &[numbers, positions, data] = res;
-
-  auto _nodes = node_on_each_connected_patch_boundary(patches, nodes);
-
-  constexpr float r = .01f;
-
-  // data.reserve(frames.size() * polygon_indices.size());
-
-  // Take variables outside.
-  vector<float> sum;
-  vector<u32> polygon_vertex_indices;
-
-  u32 i_patch = 0;
-  // For the set of nodes on each connected region.
-  for (const auto &set : _nodes) {
-    auto &patch = patches[i_patch];
-    auto p = polygon_indices.begin();
-    auto e = polygon_indices.end();
-    auto P = element_sizes.begin();
-    auto E = element_sizes.end();
-
-    u8 i_surface = 0;
-    // For each polygon
-    for (auto sz : polygon_sizes) {
-      assert(p < e);
-      assert(P < E);
-      polygon_vertex_indices.clear();
-      polygon_vertex_indices.insert(polygon_vertex_indices.end(), p, p + sz);
-
-      bool in = true;
-      for (auto index : polygon_vertex_indices) {
-        if (!set_contains(set, index))
-          in = false;
-      }
-
-      if (in) {
-        const auto &[I, J, K] = mesh_coordinates(nodes, polygon_vertex_indices);
-
-        numbers.push_back(i_surface);
-        positions.push_back(average(I));
-        positions.push_back(average(J));
-        positions.push_back(average(K));
-
-        const auto [_i1, _i2] = minmax_element(I.cbegin(), I.cend());
-        const auto [_j1, _j2] = minmax_element(J.cbegin(), J.cend());
-        const auto [_k1, _k2] = minmax_element(K.cbegin(), K.cend());
-        auto i1 = *_i1;
-        auto i2 = *_i2;
-        auto j1 = *_j1;
-        auto j2 = *_j2;
-        auto k1 = *_k1;
-        auto k2 = *_k2;
-
-        sum.clear();
-        sum.resize(frames.size(), 0.f);
-        u32 count = 0;
-
-        switch (patches[i_patch].IOR) {
-        case 1:
-        case -1:
-          find<1, 2>(j1, j2, k1, k2, frames, i_patch, patch, J, K, sum, count);
-          break;
-        case 2:
-        case -2:
-          find<0, 2>(i1, i2, k1, k2, frames, i_patch, patch, I, K, sum, count);
-          break;
-        case 3:
-        case -3:
-          find<0, 1>(i1, i2, j1, j2, frames, i_patch, patch, I, J, sum, count);
-          break;
-        default:
-          assert(false);
-          break;
-        }
-
-        if (count > 0) {
-          for (auto &s : sum)
-            s /= count;
-        } else {
-          if (all_same(I) || all_same(J) || all_same(K))
-            ++degenerated;
-          else
-            ++none;
-        }
-
-        data.insert(data.end(), sum.cbegin(), sum.cend());
-      }
-
-      p += sz;
-      ++i_surface;
-      if (i_surface == *P) {
-        i_surface = 0;
-        ++P;
-      }
-    }
-    assert(p == e);
-    assert(P == E);
-
-    ++i_patch;
-  }
-  // data.shrink_to_fit();
-  if (degenerated)
-    clog << degenerated << " surfaces seem to be degenerated.\n";
-  if (none)
-    cerr << none
-         << " non-degenerated surfaces on boundary don't contain data "
-            "point.\n";
   return res;
 }
 
+[[nodiscard]] static inline vector<float>
+calculate_node(const vector<frame> &frames, const vector<patch_info> &patches,
+               u32 i, u32 j, u32 k) {
+  vector<float> res;
+  for (size_t i_patch = 0; i_patch < patches.size(); ++i_patch) {
+    auto &patch = patches[i_patch];
+    auto [I1, I2] = patch.border<0>();
+    auto [J1, J2] = patch.border<1>();
+    auto [K1, K2] = patch.border<2>();
+    if (I1 <= i && i <= I2 && J1 <= j && j <= J2 && K1 <= k && k <= K2) {
+      for (auto &frame : frames)
+        res.push_back(
+            frame.data[i_patch].data[(i - I1) + patch.I() * (j - J1) +
+                                     patch.I() * patch.J() * (k - K1)]);
+      return res;
+    }
+  }
+  assert(false);
+  return res;
+}
+
+template <size_t dim0, size_t dim1, size_t dim2>
+[[nodiscard]] static inline vector<float>
+find(const vector<frame> &frames, const vector<patch_info> &patches,
+     const vector<float> &I, const vector<float> &J, const vector<float> &K) {
+  assert(I.size() == J.size());
+  vector<float> res;
+  for (const auto &frame : frames) {
+    float sum = 0;
+    for (size_t index = 0; index < I.size(); ++index) {
+      u32 i = lroundf(I[index]);
+      u32 j = lroundf(J[index]);
+      u32 k = lroundf(K[index]);
+      for (size_t i_patch = 0; i_patch < patches.size(); ++i_patch) {
+        auto &patch = patches[i_patch];
+        auto [I1, I2] = patch.border<dim1>();
+        auto [J1, J2] = patch.border<dim2>();
+        auto [K1, K2] = patch.border<dim0>();
+        assert(K1 == K1);
+        if (k == K1 && I1 <= i && i <= I2 && J1 <= j && j <= J2) {
+          for (auto &frame : frames)
+            sum += frame.data[i_patch]
+                       .data[(i - I1) + patch.length<dim1>() * (j - J1)];
+          goto NEXT;
+        }
+      }
+      assert(false);
+    NEXT:;
+    }
+    res.push_back(sum / I.size());
+  }
+  return res;
+}
+
+static inline float average(const vector<float> &vec) {
+  return (accumulate(vec.begin(), vec.end(), 0.f) / vec.size());
+}
+
+static inline void log_points(const vector<float> &I, const vector<float> &J,
+                              const vector<float> &K) {
+  assert(I.size() == J.size());
+  assert(I.size() == K.size());
+  for (size_t i = 0; i < I.size(); ++i)
+    clog << setw(8) << I[i] << ' ' << setw(8) << J[i] << ' ' << setw(8) << K[i]
+         << '\n';
+}
+
 /// @return Polygon surface number, polygon surface centroid positions and
 /// polygon average
-static inline tuple<vector<u32>, vector<float>, vector<float>>
-node_data(const vector<patch_info> &patches, const vector<float> &nodes,
-          const vector<u8> &element_sizes, const vector<u32> &polygon_sizes,
-          const vector<u32> &polygon_indices, const vector<frame> &frames) {
+static inline tuple<vector<u8>, vector<float>, vector<float>>
+polygon_average(const vector<patch_info> &patches, const vector<float> &nodes,
+                const vector<u8> &polygon_surface_numbers,
+                const vector<u32> &on_boundary_polygon_sizes,
+                const vector<u32> &on_boundary_polygon_indices,
+                const vector<frame> &frames) {
   assert(nodes.size() % 3 == 0);
   assert(!nodes.empty());
   assert(!patches.empty());
   size_t none = 0;
   size_t degenerated = 0;
-  auto polygon_indices_count =
-      accumulate(polygon_sizes.begin(), polygon_sizes.end(), 0);
-  assert(polygon_indices_count == polygon_indices.size());
-  tuple<vector<u32>, vector<float>, vector<float>> res;
+  auto polygon_indices_count = accumulate(on_boundary_polygon_sizes.begin(),
+                                          on_boundary_polygon_sizes.end(), 0);
+  assert(polygon_indices_count == on_boundary_polygon_indices.size());
+  tuple<vector<u8>, vector<float>, vector<float>> res;
   auto &[numbers, positions, data] = res;
-
-  auto _nodes = node_on_each_connected_patch_boundary(patches, nodes);
-
-  constexpr float r = .01f;
 
   // data.reserve(frames.size() * polygon_indices.size());
 
@@ -520,90 +446,58 @@ node_data(const vector<patch_info> &patches, const vector<float> &nodes,
   vector<float> sum;
   vector<u32> polygon_vertex_indices;
 
-  u32 i_patch = 0;
-  for (const auto &set : _nodes) {
-    auto &patch = patches[i_patch];
-    auto p = polygon_indices.begin();
-    auto e = polygon_indices.end();
-    auto P = element_sizes.begin();
-    auto E = element_sizes.end();
+  // For the set of nodes on each connected region.
+  auto p = on_boundary_polygon_indices.begin();
+  auto e = on_boundary_polygon_indices.end();
+  auto P = polygon_surface_numbers.begin();
+  auto E = polygon_surface_numbers.end();
 
-    u8 i_surface = 0;
-    for (auto sz : polygon_sizes) {
-      assert(p < e);
-      assert(P < E);
-      polygon_vertex_indices.clear();
-      polygon_vertex_indices.insert(polygon_vertex_indices.end(), p, p + sz);
+  // For each polygon
+  for (auto sz : on_boundary_polygon_sizes) {
+    assert(p < e);
+    assert(P < E);
+    polygon_vertex_indices.clear();
+    polygon_vertex_indices.insert(polygon_vertex_indices.end(), p, p + sz);
 
-      bool in = true;
-      for (auto index : polygon_vertex_indices) {
-        if (!set_contains(set, index))
-          in = false;
-      }
+    const auto &[I, J, K] = mesh_coordinates(nodes, polygon_vertex_indices);
+    const auto &[i, j, k] = round_all(I, J, K);
 
-      if (in) {
-        const auto &[I, J, K] = mesh_coordinates(nodes, polygon_vertex_indices);
+    const auto [_i1, _i2] = minmax_element(I.cbegin(), I.cend());
+    const auto [_j1, _j2] = minmax_element(J.cbegin(), J.cend());
+    const auto [_k1, _k2] = minmax_element(K.cbegin(), K.cend());
+    auto i1 = *_i1;
+    auto i2 = *_i2;
+    auto j1 = *_j1;
+    auto j2 = *_j2;
+    auto k1 = *_k1;
+    auto k2 = *_k2;
 
-        numbers.push_back(i_surface);
-        positions.push_back(average(I));
-        positions.push_back(average(J));
-        positions.push_back(average(K));
+    sum.clear();
+    sum.resize(frames.size(), 0.f);
 
-        const auto [_i1, _i2] = minmax_element(I.cbegin(), I.cend());
-        const auto [_j1, _j2] = minmax_element(J.cbegin(), J.cend());
-        const auto [_k1, _k2] = minmax_element(K.cbegin(), K.cend());
-        auto i1 = *_i1;
-        auto i2 = *_i2;
-        auto j1 = *_j1;
-        auto j2 = *_j2;
-        auto k1 = *_k1;
-        auto k2 = *_k2;
-
-        sum.clear();
-        sum.resize(frames.size(), 0.f);
-        u32 count = 0;
-
-        switch (patches[i_patch].IOR) {
-        case 1:
-        case -1:
-          find<1, 2>(j1, j2, k1, k2, frames, i_patch, patch, J, K, sum, count);
-          break;
-        case 2:
-        case -2:
-          find<0, 2>(i1, i2, k1, k2, frames, i_patch, patch, I, K, sum, count);
-          break;
-        case 3:
-        case -3:
-          find<0, 1>(i1, i2, j1, j2, frames, i_patch, patch, I, J, sum, count);
-          break;
-        default:
-          assert(false);
-          break;
-        }
-
-        if (count > 0) {
-          for (auto &s : sum)
-            s /= count;
-        } else {
-          if (all_same(I) || all_same(J) || all_same(K))
-            ++degenerated;
-          else
-            ++none;
-        }
-
-        data.insert(data.end(), sum.cbegin(), sum.cend());
-      }
-
-      p += sz;
-      ++i_surface;
-      if (i_surface == *P) {
-        i_surface = 0;
-        ++P;
-      }
+    for (size_t index = 0; index < I.size(); ++index) {
+      auto _i = I[index];
+      auto _j = J[index];
+      auto _k = K[index];
+      auto n = calculate_node(frames, patches, lroundf(_i), lroundf(_j),
+                              lroundf(_k));
+      for (size_t t = 0; t < frames.size(); ++t)
+        sum[t] += n[t];
     }
+    for (size_t t = 0; t < frames.size(); ++t)
+      sum[t] /= I.size();
 
-    ++i_patch;
+    numbers.push_back(*P);
+    positions.push_back(average(I));
+    positions.push_back(average(J));
+    positions.push_back(average(K));
+    data.insert(data.end(), sum.cbegin(), sum.cend());
+    p += sz;
+    ++P;
   }
+  assert(p == e);
+  assert(P == E);
+
   // data.shrink_to_fit();
   if (degenerated)
     clog << degenerated << " surfaces seem to be degenerated.\n";
