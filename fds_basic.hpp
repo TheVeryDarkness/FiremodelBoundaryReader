@@ -438,10 +438,10 @@ public:
     auto [y1, y2] = border<1>();
     auto [X1, X2] = p.border<0>();
     auto [Y1, Y2] = p.border<1>();
-    if ((X1 <= x1 && x2 <= X2) || (x1 <= X1 && X2 <= x2))
+    if (X1 < x2 && x1 < X2)
       if (y1 == Y2 || y2 == Y1)
         return true;
-    if ((Y1 <= y1 && y2 <= Y2) || (y1 <= Y1 && Y2 <= y2))
+    if (Y1 < y2 && y1 <= Y2)
       if (x1 == X2 || x2 == X1)
         return true;
     return false;
@@ -569,8 +569,8 @@ struct connected_region {
     return {P1, P2, Q1, Q2};
   }
 
-  [[nodiscard]] static bool insert(vector<patch_region> &fragments,
-                                   const array<patch_region, 4> &arr) {
+  static bool insert(vector<patch_region> &fragments,
+                     const array<patch_region, 4> &arr) {
 #ifndef NDEBUG
     bool empty_found = false;
     for (auto &f : arr)
@@ -594,7 +594,8 @@ struct connected_region {
     for (auto p = fragments.cbegin(); p != fragments.cend(); ++p) {
       auto &frag = *p;
       auto &&[suc, frags] = push(frag);
-      if (insert(fragments, frags)) {
+      if (suc) {
+        insert(fragments, frags);
         fragments.erase(p);
         goto RESTART;
       }

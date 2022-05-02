@@ -468,20 +468,20 @@ d - Discard.
         cout << '*' << *begin;
     } break;
 #if GRAPHICS_ENABLED
-      /*
     case 'y':
       if (selected_patch < patches.size() && elem_avail()) {
-        auto [polygon_sizes, polygon_indices, _0, _1] =
+        auto [polygon_sizes, polygon_indices, _0, _1, surface_numbers] =
             get_polygon<false, false>(element_sizes, element_indices, {});
         auto [sizes_of_polygon_vertices_on_boundary,
               indices_of_polygon_vertices_on_boundary, _2, _3] =
             polygon_on_boundary<false>({patches[selected_patch]}, nodes,
-                                       polygon_sizes, polygon_indices, {},);
+                                       polygon_sizes, polygon_indices, {},
+                                       surface_numbers);
 
         visualize_polygons(nodes, sizes_of_polygon_vertices_on_boundary,
                            indices_of_polygon_vertices_on_boundary);
       }
-      break;*/
+      break;
     case 'n':
       if (selected_patch < patches.size() && elem_avail()) {
         auto indices_of_node_on_boundary =

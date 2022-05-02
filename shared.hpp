@@ -233,14 +233,15 @@ static inline vector<u32> primitive_on_boundary(
 }
 
 /// @brief
-/// @return Sizes of polygons, Indices of polygon vertices and element numbers
+/// @return Polygons vertex counts, polygon vertex counts, element numbers,
+/// surface numbers
 template <bool withElementNumber>
 static inline tuple<vector<u32>, vector<u32>, vector<u32>, vector<u8>>
 polygon_on_boundary(const vector<patch_info> &patches,
                     const vector<float> &nodes,
                     const vector<u32> &polygon_sizes,
                     const vector<u32> &polygon_indices,
-                    const vector<u32> &element_index_map,
+                    const vector<u32> &element_numbers,
                     const vector<u8> &polygon_surface_numbers) {
   assert(nodes.size() % 3 == 0);
   assert(!nodes.empty());
@@ -248,7 +249,11 @@ polygon_on_boundary(const vector<patch_info> &patches,
   auto sum = accumulate(polygon_sizes.begin(), polygon_sizes.end(), 0);
   assert(sum == polygon_indices.size());
   if constexpr (withElementNumber)
-    assert(polygon_sizes.size() == element_index_map.size());
+    assert(polygon_sizes.size() == element_numbers.size());
+  else
+    assert(polygon_sizes.empty());
+  assert(element_numbers.size() == polygon_sizes.size());
+  assert(polygon_surface_numbers.size() == polygon_sizes.size());
   tuple<vector<u32>, vector<u32>, vector<u32>, vector<u8>> res;
   auto &[sizes, indices, numbers, load_keys] = res;
 
@@ -269,14 +274,8 @@ polygon_on_boundary(const vector<patch_info> &patches,
       polygon_vertex_indices.clear();
       polygon_vertex_indices.insert(polygon_vertex_indices.cend(), p, p + sz);
 
-      bool in = true;
       // For each vertex of current polygon
-      for (auto index : polygon_vertex_indices) {
-        if (!set_contains(set, index)) {
-          in = false;
-          break;
-        }
-      }
+      const bool in = set_contains_all(set, polygon_vertex_indices);
 
       if (in) {
         for (auto i : polygon_vertex_indices) {
@@ -284,7 +283,7 @@ polygon_on_boundary(const vector<patch_info> &patches,
           indices.push_back(i);
         }
         if constexpr (withElementNumber)
-          numbers.push_back(element_index_map[i_polygon]);
+          numbers.push_back(element_numbers[i_polygon]);
         sizes.push_back(sz);
         load_keys.push_back(*P);
       }

@@ -142,6 +142,12 @@ static inline const map<u32, vector<u32>> &get_element_triangles() {
   return element_frames;
 }
 
+/// @brief
+/// @param sizes
+/// @param indices
+/// @param number_map
+/// @return Polygon vertex counts, polygon vertex indices, element polygons
+/// counts, element numbers, surface numbers
 template <bool withElementSize, bool withElementNumber>
 static inline tuple<vector<u32>, vector<u32>,
                     conditional_t<withElementSize, vector<u8>, tuple<>>,
@@ -319,7 +325,14 @@ template <typename Ty> static inline bool set_contains(const set<Ty> &s, Ty v) {
 }
 template <typename Ty>
 static inline bool set_contains_all(const set<Ty> &s, initializer_list<Ty> l) {
-  for (auto v : l)
+  for (auto &v : l)
+    if (!set_contains(s, v))
+      return false;
+  return true;
+}
+template <typename Ty>
+static inline bool set_contains_all(const set<Ty> &s, const vector<Ty> &l) {
+  for (auto &v : l)
     if (!set_contains(s, v))
       return false;
   return true;
