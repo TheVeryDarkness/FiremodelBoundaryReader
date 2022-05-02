@@ -387,7 +387,7 @@ public:
       ++count;
     };
     for (size_t i = 0; i < 3; ++i)
-      if (x[i] != x[i + 1])
+      if (x[i] != x[i + 1]) {
         if (c[3 * i] && c[3 * i + 1] && c[3 * i + 2])
           _push(x[i], x[i + 1], y[0], y[3]);
         else if (c[3 * i] && c[3 * i + 1])
@@ -399,6 +399,7 @@ public:
             if (c[3 * i + j]) {
               _push(x[i], x[i + 1], y[j], y[j + 1]);
             }
+      }
     return res;
   }
   /// @brief Merge another region with this. Changes are made only if true is
@@ -408,7 +409,7 @@ public:
   [[nodiscard]] constexpr bool merge(const patch_region &p) {
     auto [p1, p2] = p.border<0>();
     auto [q1, q2] = p.border<1>();
-    if (P1 == p1 && P2 == P2) {
+    if (P1 == p1 && P2 == p2) {
       if (Q1 == q2) {
         Q1 = q1;
         return true;
@@ -700,6 +701,12 @@ struct connected_regions {
   }
 };
 
+static const float tolerance = .01f;
+
+static inline bool out_of_tolerance(float n, long i) {
+  return abs(n - i) > tolerance;
+}
+
 class regions {
   // X Y Z
   array<map<u32, connected_regions>, 3> r;
@@ -759,6 +766,9 @@ class regions {
           if (cr.contains(p, q))
             current.insert(i_node);
         }
+        assert(p1 == p2);
+        assert(q1 == q2);
+        assert(r1 == r2);
         res.push_back(std::move(current));
       }
     }

@@ -68,8 +68,9 @@ template <size_t i, typename first, typename... res>
 struct subset_start_from<i, first, res...> {
   using type = typename subset_start_from<i - 1, res...>::type;
 };
-template <typename... types> struct subset_start_from<0, types...> {
-  using type = type_list<types...>;
+template <typename first, typename... res>
+struct subset_start_from<0, first, res...> {
+  using type = type_list<first, res...>;
 };
 
 template <size_t i, typename... types>

@@ -145,28 +145,31 @@ static inline const map<u32, vector<u32>> &get_element_triangles() {
 template <bool withElementSize, bool withElementNumber>
 static inline tuple<vector<u32>, vector<u32>,
                     conditional_t<withElementSize, vector<u8>, tuple<>>,
-                    vector<u32>>
+                    vector<u32>, vector<u8>>
 get_polygon(const vector<u32> &sizes, const vector<u32> &indices,
             conditional_t<withElementNumber, vector<u32>, tuple<>> number_map) {
   auto count = accumulate(sizes.begin(), sizes.end(), 0);
   assert(count == indices.size());
   tuple<vector<u32>, vector<u32>,
-        conditional_t<withElementSize, vector<u8>, tuple<>>, vector<u32>>
+        conditional_t<withElementSize, vector<u8>, tuple<>>, vector<u32>,
+        vector<u8>>
       res;
-  auto &[polygon_sizes, polygon_indices, element_sizes, element_numbers] = res;
+  auto &[polygon_sizes, polygon_indices, element_sizes, element_numbers,
+         surface_numbers] = res;
   auto p = indices.begin();
-  auto end = indices.end();
+  const auto e = indices.end();
   auto &map = get_element_polygons();
 
   u32 i_element = 0;
   for (auto sz : sizes) {
-    assert(p < end);
+    assert(p < e);
     auto &[polygon_size, polygon_vertex_indices] = map.at(sz);
     for (size_t i = 0; i < polygon_vertex_indices.size() / polygon_size; ++i) {
       polygon_sizes.push_back(polygon_size);
       if constexpr (withElementNumber) {
         element_numbers.push_back(number_map[i_element]);
       }
+      surface_numbers.push_back(i);
     }
     for (auto polygon_vertex_index : polygon_vertex_indices) {
       assert(polygon_vertex_index < sz);
@@ -180,6 +183,7 @@ get_polygon(const vector<u32> &sizes, const vector<u32> &indices,
     p += sz;
     ++i_element;
   }
+  assert(p == e);
   return res;
 }
 
