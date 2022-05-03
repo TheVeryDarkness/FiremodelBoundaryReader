@@ -222,7 +222,7 @@ q - quit
     } break;
     case 'r': {
       auto opt = request_file_by_name(
-          [](const path &p) { return is_regular_file(p); }, "directory");
+          [](const path &p) { return is_regular_file(p); }, "readable");
 
       if (opt.has_value()) {
         auto f = opt.value();
@@ -391,6 +391,7 @@ a - Analyze patch data.)";
       if (!fin) {
         cout << "Failed to open the file." << endl;
       }
+      frames.clear();
       data = read_file_with_mode(fin);
     } break;
 #if GRAPHICS_ENABLED
