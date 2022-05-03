@@ -10,6 +10,7 @@
 #include <iostream>
 #include <map>
 #include <set>
+#include <stack>
 #include <vector>
 
 using std::conditional_t;
@@ -23,6 +24,7 @@ using std::ofstream;
 using std::ostream;
 using std::set;
 using std::setprecision;
+using std::stack;
 using std::stringstream;
 using std::tuple;
 using std::filesystem::create_directory;
@@ -124,6 +126,10 @@ static inline void apply_function(vector<float> &data) {
   string func;
   cin >> func;
   auto &f_map = get_function_map();
+  for (auto &[name, info] : f_map) {
+    auto &[desc, _0, _1] = info;
+    cout << setw(8) << name << " - " << desc << '\n';
+  }
   auto iter = f_map.find(func);
   if (iter == f_map.end())
     return;
@@ -297,17 +303,13 @@ static inline void select_patch(const vector<patch_info> &patches) {
   u32 p = 0;
   cout << "Select a patch to analyze. Input an invalid index to discard."
        << endl;
-#if GRAPHICS_ENABLED
-  if (current < patches.size())
-    cout << "Current patch selected in graphics mode is: " << current << "."
-         << endl;
-#endif // GRAPHICS_ENABLED
 
   cout << "Patch index: ";
   cin >> p;
   if (p >= patches.size()) {
     return;
   }
+  selected_patch = p;
 }
 
 static inline void analyze(const vector<patch_info> &patches,
@@ -467,7 +469,7 @@ d - Discard.
     } break;
     case 'C': {
       optional<path> opt =
-          request_file_by_name([](const path &p) { return true; }, "existed");
+          request_file_by_name([](const path &p) { return true; }, "output");
       if (!opt)
         break;
       auto &path = opt.value();
@@ -484,6 +486,7 @@ d - Discard.
       save_patch_as_csv_text(data, m, n, fout);
     } break;
     case 'F': {
+      apply_function(data);
     } break;
     case 'f': {
       size_t d = 2;
