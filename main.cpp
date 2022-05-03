@@ -9,6 +9,7 @@
 /// adapted from https://github.com/JoeyDeVries/LearnOpenGL.
 #include "analysis.hpp"
 #include "apdl_io.hpp"
+#include "attacher.hpp"
 #include "elements_io.hpp"
 #include "fds_io.hpp"
 #include "fs.hpp"
@@ -418,7 +419,10 @@ a - Analyze patch data.)";
       print_header(cout, label, bar_label, units);
     } break;
     case 'a': {
-      analyze(patches, frames, elements_data);
+      analyze(patches, frames);
+    } break;
+    case 'A': {
+      attach(patches, frames, elements_data);
     } break;
     case 'f': {
       if (!frames.empty())

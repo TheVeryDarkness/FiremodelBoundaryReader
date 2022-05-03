@@ -13,6 +13,7 @@ using std::accumulate;
 using std::cerr;
 using std::clog;
 using std::cout;
+using std::decay_t;
 using std::endl;
 using std::extent_v;
 using std::get;

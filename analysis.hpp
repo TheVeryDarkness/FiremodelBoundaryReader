@@ -1,5 +1,4 @@
 #pragma once
-#include "elements_io.hpp"
 #include "fs.hpp"
 #include "graphics.hpp"
 #include "io.hpp"
@@ -9,6 +8,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <map>
 #include <set>
 #include <vector>
 
@@ -18,6 +18,7 @@ using std::decay_t;
 using std::endl;
 using std::ifstream;
 using std::ios;
+using std::map;
 using std::ofstream;
 using std::ostream;
 using std::set;
@@ -28,8 +29,9 @@ using std::filesystem::create_directory;
 using std::filesystem::exists;
 
 static inline u16 default_precision = 0;
+template <bool enableDefaultPrecision = true>
 static inline u16 input_precision() {
-  if (default_precision)
+  if (enableDefaultPrecision && default_precision)
     return default_precision;
   u16 precision = 0;
   cout << "Precision:";
@@ -95,8 +97,56 @@ static inline void save_patch_as_binary(const vector<float> &data,
   write_vector_binary(fout, data);
 }
 
-static inline tuple<u32, u32> get_matrix_size(const vector<u32> &sizes) {
+struct function_info {
+  using func = float (&)(float);
+  const char *desc;
+  float (&fun)(float);
+  bool (*pred)(float) = nullptr;
+};
 
+bool positive(float num) noexcept { return num > 0; }
+bool more_than_minus_one(float num) noexcept { return num > -1; }
+
+static inline const map<string, function_info> &get_function_map() {
+  using func = function_info::func;
+  static map<string, function_info> map;
+  if (map.empty()) {
+    map.emplace("log", function_info{"Natural logarithm", std::log, positive});
+    map.emplace("log1p", function_info{"Natural logarithm of plus 1",
+                                       std::log1p, more_than_minus_one});
+  }
+  return map;
+}
+
+static bool disableDataCheck = false;
+
+static inline void apply_function(vector<float> &data) {
+  string func;
+  cin >> func;
+  auto &f_map = get_function_map();
+  auto iter = f_map.find(func);
+  if (iter == f_map.end())
+    return;
+  auto &[name, tup] = *iter;
+  auto &[desc, f, pred] = tup;
+  if (pred && !disableDataCheck) {
+    for (auto d : data)
+      if (!pred(d)) {
+        cout << "Function may not be able to be applied to these "
+                "data.\nContinue? (y or n)";
+        char opt = 'n';
+        cin >> opt;
+        if (opt != 'y')
+          return;
+        break;
+      }
+  }
+  cout << desc << '\n';
+  for (auto &d : data)
+    d = f(d);
+}
+
+static inline tuple<u32, u32> get_matrix_size(const vector<u32> &sizes) {
   if (sizes.size() > 2) {
     cout << "Data dimension " << sizes.size() << " > 2." << endl;
     return {0, 0};
@@ -260,114 +310,10 @@ static inline void select_patch(const vector<patch_info> &patches) {
   }
 }
 
-static inline void
-analyze(const vector<patch_info> &patches, const vector<frame> &frames,
-        const tuple<vector<float>, vector<u32>, vector<u32>, vector<u32>,
-                    vector<u32>> &element_data) {
+static inline void analyze(const vector<patch_info> &patches,
+                           const vector<frame> &frames) {
   vector<float> data;
   vector<u32> sizes;
-  auto &[nodes, element_sizes, element_indices, node_numbers, element_numbers] =
-      element_data;
-
-  auto elem_avail = [&]() {
-    auto &[nodes, element_sizes, element_indices, node_numbers,
-           element_numbers] = element_data;
-
-    return !nodes.empty() && !element_sizes.empty() && !element_indices.empty();
-  };
-
-  /// polygon sizes, polygon indices, element sizes, node number, element
-  /// number, surface numbers
-  tuple<vector<u32>, vector<u32>, vector<u8>, vector<u32>, vector<u32>,
-        vector<u8>>
-      polygons;
-  bool polygons_calculated = false;
-  auto calculate_polygon =
-      [&element_data, &polygons, &calculated =
-       polygons_calculated ]() -> const auto & {
-    if (!calculated) {
-      auto &[nodes, element_sizes, element_indices, node_numbers,
-             element_numbers] = element_data;
-
-      polygons = get_polygon<true>(element_sizes, element_indices, node_numbers,
-                                   element_numbers);
-
-      calculated = true;
-    }
-    return polygons;
-  };
-
-  // indices_of_nodes_on_boundary
-  set<u32> nodes_on_boundary;
-  bool nodes_on_boundary_calculated = false;
-  auto calculate_node_on_boundary = [
-    &patches, &element_data, &nodes_on_boundary, &calculate_polygon,
-    &calculated = nodes_on_boundary_calculated
-  ]() -> const auto & {
-    if (!calculated) {
-      auto &[nodes, element_sizes, element_indices, node_numbers_map,
-             element_numbers_map] = element_data;
-      auto &[polygon_sizes, polygon_indices, _, node_element_numbers,
-             polygon_element_numbers, surface_numbers] = calculate_polygon();
-      nodes_on_boundary = node_on_boundary(patches, nodes);
-      calculated = true;
-    }
-    return nodes_on_boundary;
-  };
-
-  // sizes_of_polygon_vertices_on_boundary,
-  // indices_of_polygon_vertices_on_boundary,
-  // numbers_of_nodes_of_polygon_on_boundary
-  // numbers_of_element_whose_polygon_on_boundary
-  // numbers_of_surface_on_boundary
-  tuple<vector<u32>, vector<u32>, vector<u32>, vector<u32>, vector<u8>>
-      polygons_on_boundary;
-  bool polygons_on_boundary_calculated = false;
-  auto calculate_polygon_on_boundary = [
-    &element_data, &patches, &polygons_on_boundary, &calculate_polygon,
-    &calculated = polygons_on_boundary_calculated
-  ]() -> const auto & {
-    if (!calculated) {
-      auto &[nodes, element_sizes, element_indices, node_numbers,
-             element_numbers] = element_data;
-      auto &[polygon_sizes, polygon_indices, polygon_element_sizes,
-             polygon_node_numbers, polygon_element_numbers, surface_numbers] =
-          calculate_polygon();
-      polygons_on_boundary = polygon_on_boundary(
-          patches, nodes, polygon_sizes, polygon_indices, polygon_node_numbers,
-          polygon_element_numbers, surface_numbers);
-      calculated = true;
-    }
-    return polygons_on_boundary;
-  };
-
-  // Polygon surface number, polygon surface centroid positions and polygon
-  // average
-  tuple<vector<u8>, vector<float>, vector<float>> polygons_average;
-  bool average_calculated = false;
-  auto calculate_polygon_average = [
-        &calculated = average_calculated, &polygons_average, &calculate_polygon,
-        &calculate_polygon_on_boundary, &patches, &element_data, &frames
-  ]() -> const auto & {
-    auto &[polygon_sizes, polygon_indices, element_sizes, polygon_node_numbers,
-           polygon_element_numbers, surface_numbers] = calculate_polygon();
-
-    auto &[sizes_of_polygon_vertices_on_boundary,
-           indices_of_polygon_vertices_on_boundary,
-           indices_of_node_whose_polygon_on_boundary,
-           indices_of_element_whose_polygon_on_boundary,
-           numbers_of_surfaces_on_boundary] = calculate_polygon_on_boundary();
-
-    if (!calculated) {
-      auto &[nodes, element_sizes, element_indices, node_numbers,
-             element_numbers] = element_data;
-      polygons_average =
-          polygon_average(patches, nodes, numbers_of_surfaces_on_boundary,
-                          sizes_of_polygon_vertices_on_boundary,
-                          indices_of_polygon_vertices_on_boundary, frames);
-    }
-    return polygons_average;
-  };
 
   while (true) {
     cout << R"(
@@ -381,6 +327,7 @@ c - Read CSV file as current result.)";
     if (!data.empty())
       cout <<
           R"(
+F - Apply math functions to all cells in current result.
 f - Flatten current result to specified dimension.
 a - Calculate average on specified dimension of current result.
 p - Print current result to console.
@@ -391,22 +338,6 @@ C - Save current result as CSV file.)";
       cout << R"(
 s - Select a patch.
 M - Visualize merged patches.)";
-
-#if GRAPHICS_ENABLED
-    if (!patches.empty() && elem_avail())
-      cout << R"(
-y - Visualize polygons on current patch.
-n - Visualize nodes on current patch.
-r - Visualize elements primitives on current patch.
-Y - Visualize polygons on boundary.
-N - Visualize nodes on boundary.
-R - Visualize elements primitives on boundary.)";
-#endif // GRAPHICS_ENABLED
-
-    if (!patches.empty() && !frames.empty() && elem_avail())
-      cout << R"(
-l - Write APDL output.
-A - Review output by visualizing them.)";
 
     if (!frames.empty() && selected_patch < patches.size())
       cout <<
@@ -463,69 +394,6 @@ d - Discard.
       for (; begin != end; ++begin)
         cout << '*' << *begin;
     } break;
-#if GRAPHICS_ENABLED
-    case 'y':
-      if (selected_patch < patches.size() && elem_avail()) {
-        auto [polygon_sizes, polygon_indices, _0, _1, _2, surface_numbers] =
-            get_polygon<false>(element_sizes, element_indices, {}, {});
-        auto [sizes_of_polygon_vertices_on_boundary,
-              indices_of_polygon_vertices_on_boundary, _3, _4, _5] =
-            polygon_on_boundary({patches[selected_patch]}, nodes, polygon_sizes,
-                                polygon_indices, {}, {}, surface_numbers);
-
-        visualize_polygons(nodes, sizes_of_polygon_vertices_on_boundary,
-                           indices_of_polygon_vertices_on_boundary);
-      }
-      break;
-    case 'n':
-      if (selected_patch < patches.size() && elem_avail()) {
-        auto indices_of_node_on_boundary =
-            node_on_boundary({patches[selected_patch]}, nodes);
-
-        visualize_nodes(nodes, vector<u32>(indices_of_node_on_boundary.begin(),
-                                           indices_of_node_on_boundary.end()));
-      }
-      break;
-    case 'r':
-      if (selected_patch < patches.size() && elem_avail()) {
-        auto primitive_indices =
-            get_primitives(nodes, element_sizes, element_indices, wireframe);
-        auto primitive_indices_on_boundary = primitive_on_boundary(
-            {patches[selected_patch]}, nodes, primitive_indices, wireframe);
-        visualize_primitives(nodes, primitive_indices_on_boundary);
-      }
-      break;
-    case 'Y':
-      if (!patches.empty() && elem_avail()) {
-        auto &[polygon_sizes, polygon_indices, _0, _1, _2, _3] =
-            calculate_polygon();
-        auto &[sizes_of_polygon_vertices_on_boundary,
-               indices_of_polygon_vertices_on_boundary,
-               indices_of_node_whose_polygon_on_boundary,
-               indices_of_element_whose_polygon_on_boundary, surface_numbers] =
-            calculate_polygon_on_boundary();
-
-        visualize_polygons(nodes, sizes_of_polygon_vertices_on_boundary,
-                           indices_of_polygon_vertices_on_boundary);
-      }
-      break;
-    case 'N':
-      if (!patches.empty() && elem_avail()) {
-        auto indices_of_node_on_boundary = node_on_boundary(patches, nodes);
-
-        visualize_nodes(nodes, vector<u32>(indices_of_node_on_boundary.begin(),
-                                           indices_of_node_on_boundary.end()));
-      }
-      break;
-    case 'R':
-      if (!patches.empty() && elem_avail()) {
-        auto primitive_indices =
-            get_primitives(nodes, element_sizes, element_indices, wireframe);
-        auto primitive_indices_on_boundary =
-            primitive_on_boundary(patches, nodes, primitive_indices, wireframe);
-        visualize_primitives(nodes, primitive_indices_on_boundary);
-      }
-      break;
     case 'p': {
       u16 precision = input_precision();
       cout << setprecision(precision);
@@ -534,98 +402,10 @@ d - Discard.
       if (n != 0)
         print_patch(data, m, n);
     } break;
-    case 'A':
-      if (!patches.empty() && elem_avail()) {
-        auto &[_, centroid, boundary_data] = calculate_polygon_average();
-        if (centroid.empty() || boundary_data.empty()) {
-          cerr << "No surfaces on boundary found\n";
-          break;
-        }
-        assert(frames.size() <= numeric_limits<u32>::max());
-        visualize_nodes(centroid, boundary_data, (u32)frames.size());
-      }
-      break;
-    case 'M':
-      if (!patches.empty()) {
-        visualize_regions(merge(patches));
-      }
-      break;
-#endif // GRAPHICS_ENABLED
     case 'P': {
-      u16 precision = input_precision();
+      u16 precision = input_precision<false>();
       set_default_precision(precision);
     } break;
-    case 'l':
-      if (!patches.empty() && !frames.empty() && elem_avail()) {
-        auto opt1 = request_file_by_name([](const path &p) { return true; },
-                                         "APDL output");
-        auto opt2 = request_file_by_name([](const path &p) { return true; },
-                                         "APDL output directory");
-        if (!opt1)
-          break;
-        auto out = ofstream(opt1.value());
-        if (!out) {
-          cout << "Open Failed." << endl;
-        }
-        if (!opt2)
-          break;
-        auto &dir = opt2.value();
-        if (!exists(dir)) {
-          auto suc = create_directory(dir);
-          if (!suc) {
-            cout << "Create Failed." << endl;
-          }
-        }
-        out << "/PREP7" << endl;
-
-        const auto N = frames.size();
-
-        auto &[on_boundary_vertex_sizes, on_boundary_vertex_indices,
-               node_numbers, element_numbers, surface_numbers] =
-            calculate_polygon_on_boundary();
-        auto &[on_boundary_surface_numbers, _2, boundary_data] =
-            calculate_polygon_average();
-
-        assert(on_boundary_surface_numbers.size() ==
-               on_boundary_vertex_sizes.size());
-
-        vector<vector<u32>::const_iterator> ps;
-        ps.reserve(on_boundary_surface_numbers.size() + 1);
-        vector<vector<float>::const_iterator> Ps;
-        Ps.reserve(on_boundary_surface_numbers.size() + 1);
-        {
-          auto p = on_boundary_vertex_indices.begin();
-          auto e = on_boundary_vertex_indices.end();
-          auto P = boundary_data.begin();
-          auto E = boundary_data.end();
-
-          for (auto sz : on_boundary_vertex_sizes) {
-            assert(p < e);
-            assert(P < E);
-            ps.push_back(p);
-            Ps.push_back(P);
-            p += sz;
-            P += N;
-          }
-          ps.push_back(p);
-          Ps.push_back(P);
-          assert(p == e);
-          assert(P == E);
-        }
-
-        assert(element_numbers.size() == on_boundary_surface_numbers.size());
-#pragma omp parallel for schedule(dynamic, 5000)
-        for (long i = 0; i < on_boundary_vertex_sizes.size(); ++i) {
-          write_table(out, opt2.value(), "HFLUX", element_numbers[i],
-                      on_boundary_surface_numbers[i], ps[i], ps[i + 1], frames,
-                      Ps[i], Ps[i + 1]);
-        }
-        out << "FINISH" << endl
-            << "/SOLU" << endl
-            << "ALLSEL,ALL" << endl
-            << "/NERR,,99999999" << endl;
-      }
-      break;
     case 'S': {
       size_t dimension = -1;
       cin >> dimension;
@@ -686,8 +466,8 @@ d - Discard.
       }
     } break;
     case 'C': {
-      optional<path> opt = request_file_by_name(
-          [](const path &p) { return exists(p); }, "existed");
+      optional<path> opt =
+          request_file_by_name([](const path &p) { return true; }, "existed");
       if (!opt)
         break;
       auto &path = opt.value();
@@ -702,6 +482,8 @@ d - Discard.
 
       auto [m, n] = get_matrix_size(sizes);
       save_patch_as_csv_text(data, m, n, fout);
+    } break;
+    case 'F': {
     } break;
     case 'f': {
       size_t d = 2;

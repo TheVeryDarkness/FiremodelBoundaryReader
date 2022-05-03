@@ -151,6 +151,7 @@
   <ItemGroup>
     <ClInclude Include="analysis.hpp" />
     <ClInclude Include="apdl_io.hpp" />
+    <ClInclude Include="attacher.hpp" />
     <ClInclude Include="debug.hpp" />
     <ClInclude Include="element_basic.hpp" />
     <ClInclude Include="fds_io.hpp" />

@@ -3,12 +3,15 @@
 #include "element_basic.hpp"
 #include "fds_basic.hpp"
 #include <cassert>
+#include <iomanip>
 
 using std::all_of;
 using std::int_fast64_t;
 using std::make_tuple;
 using std::minmax_element;
+using std::setw;
 using std::uint_fast8_t;
+using std::vector;
 
 static inline tuple<tuple<vector<float>>, vector<u32>>
 from_patches_and_elements(const vector<float> &nodes,

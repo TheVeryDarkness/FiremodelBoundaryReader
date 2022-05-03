@@ -59,5 +59,8 @@
     <ClInclude Include="debug.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="attacher.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
