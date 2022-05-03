@@ -22,8 +22,10 @@ static inline tuple<vector<u32>, u32, u32> read_element_in_apdl(istream &in,
                                                                 u32 ei) {
   static_assert(SizeAt < ParameterCount);
   u32 unknown[ParameterCount] = {};
-  for (auto &u : unknown)
+  for (auto &u : unknown) {
+    assert(in);
     in >> u;
+  }
 
   if constexpr (withSize) {
     auto size = unknown[SizeAt];
@@ -33,6 +35,7 @@ static inline tuple<vector<u32>, u32, u32> read_element_in_apdl(istream &in,
 
     for (size_t i = 0; i < size; ++i) {
       auto &n = indices.at(i);
+      assert(in);
       in >> n;
       if (n == 0) {
         cerr << "Element " << ei << " has a node 0." << endl;
@@ -50,6 +53,7 @@ static inline tuple<vector<u32>, u32, u32> read_element_in_apdl(istream &in,
         break;
       }
       u32 n = 0;
+      assert(in);
       in >> n;
       if (n == 0) {
         cerr << "Element " << ei << " has a zero node." << endl;
@@ -65,19 +69,21 @@ static inline tuple<vector<u32>, u32, u32> read_element_in_apdl(istream &in,
 /// @brief Read from mapdl file.
 /// @param in: Stream that reads from mapdl file.
 /// @return Nodes coordinates, vertex count, element vertex indices.
-template <bool readNodes, bool readElements, bool readElementNumbers,
-          bool skipContact>
+template <bool readNodes, bool readElements, bool readNodeNumbers,
+          bool readElementNumbers, bool skipContact>
 static inline tuple<conditional_t<readNodes, vector<float>, tuple<>>,
                     tuple<conditional_t<readElements, vector<u32>, tuple<>>,
                           conditional_t<readElements, vector<u32>, tuple<>>>,
+                    conditional_t<readNodeNumbers, vector<u32>, tuple<>>,
                     conditional_t<readElementNumbers, vector<u32>, tuple<>>>
 read_mapdl(istream &in) {
   tuple<conditional_t<readNodes, vector<float>, tuple<>>,
         tuple<conditional_t<readElements, vector<u32>, tuple<>>,
               conditional_t<readElements, vector<u32>, tuple<>>>,
+        conditional_t<readNodeNumbers, vector<u32>, tuple<>>,
         conditional_t<readElementNumbers, vector<u32>, tuple<>>>
       res;
-  auto &[nodes, size_and_element, numbers] = res;
+  auto &[nodes, size_and_element, node_numbers, element_numbers] = res;
   auto &[vertex_count, elements] = size_and_element;
 
   constexpr auto &start = "/wb,contact,start";
@@ -90,11 +96,13 @@ read_mapdl(istream &in) {
     string_view l = line;
 
     if constexpr (skipContact)
-      if (l.substr(0, sizeof(start) - 1) == start)
+      if (l.substr(0, sizeof(start) - 1) == start) {
         do {
           getline(in, line);
           l = line;
         } while (l.substr(0, sizeof(end) - 1) != end);
+        continue;
+      }
 
     auto comma1 = l.find_first_of(",");
     if (comma1 == string_view::npos)
@@ -108,18 +116,25 @@ read_mapdl(istream &in) {
 
         while (in) {
           in >> ws;
-          if (in.peek() == '-')
+          if (in.peek() == '-') {
+            in.get();
+            assert(in.get() == '1');
+            getline(in, trash);
             break;
+          }
 
-          u32 index;
+          u32 index = 0;
           float coordinates[3];
+          assert(in);
           in >> index;
 
-          // Assume continuous
-          assert(index == nodes.size() / 3 + 1);
+          if constexpr (readNodeNumbers)
+            node_numbers.push_back(index);
 
-          for (auto &c : coordinates)
+          for (auto &c : coordinates) {
+            assert(in);
             in >> c;
+          }
           coordinates[2] = -coordinates[2];
           for (auto &c : coordinates)
             nodes.push_back(c);
@@ -140,24 +155,16 @@ read_mapdl(istream &in) {
             break;
 
           assert(vertex_count.size() <= numeric_limits<u32>::max());
-          if (third == "solid") {
-            auto [indices, size, number] =
-                read_element_in_apdl<11, true, 8, 10>(in,
-                                                      (u32)vertex_count.size());
-            for (auto n : indices)
-              elements.push_back(n);
-            vertex_count.push_back(size);
-            if constexpr (readElementNumbers)
-              numbers.push_back(number);
-          } else {
-            auto [indices, size, number] = read_element_in_apdl<5, false, 0, 0>(
-                in, (u32)vertex_count.size());
-            for (auto n : indices)
-              elements.push_back(n);
-            vertex_count.push_back(size);
-            if constexpr (readElementNumbers)
-              numbers.push_back(number);
-          }
+          auto [indices, size, number] =
+              third == "solid" ? read_element_in_apdl<11, true, 8, 10>(
+                                     in, (u32)vertex_count.size())
+                               : read_element_in_apdl<5, false, 0, 0>(
+                                     in, (u32)vertex_count.size());
+          for (auto n : indices)
+            elements.push_back(n);
+          vertex_count.push_back(size);
+          if constexpr (readElementNumbers)
+            element_numbers.push_back(number);
         }
       }
 
@@ -169,8 +176,11 @@ read_mapdl(istream &in) {
   if constexpr (readElements)
     if (elements.empty())
       cerr << "Elements definition not found" << endl;
+  if constexpr (readNodeNumbers)
+    if (node_numbers.empty())
+      cerr << "Node numbers definition not found" << endl;
   if constexpr (readElementNumbers)
-    if (numbers.empty())
+    if (element_numbers.empty())
       cerr << "Element numbers definition not found" << endl;
   return res;
 }

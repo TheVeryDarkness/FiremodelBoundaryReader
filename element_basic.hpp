@@ -147,21 +147,24 @@ static inline const map<u32, vector<u32>> &get_element_triangles() {
 /// @param indices
 /// @param number_map
 /// @return Polygon vertex counts, polygon vertex indices, element polygons
-/// counts, element numbers, surface numbers
-template <bool withElementSize, bool withElementNumber>
+/// counts, node numbers, element numbers, surface numbers
+template <bool withElementSize>
 static inline tuple<vector<u32>, vector<u32>,
                     conditional_t<withElementSize, vector<u8>, tuple<>>,
-                    vector<u32>, vector<u8>>
+                    vector<u32>, vector<u32>, vector<u8>>
 get_polygon(const vector<u32> &sizes, const vector<u32> &indices,
-            conditional_t<withElementNumber, vector<u32>, tuple<>> number_map) {
+            const vector<u32> &node_number_map,
+            const vector<u32> &element_number_map) {
+  const bool withNodeNumber = !node_number_map.empty();
+  const bool withElementNumber = !element_number_map.empty();
   auto count = accumulate(sizes.begin(), sizes.end(), 0);
   assert(count == indices.size());
   tuple<vector<u32>, vector<u32>,
         conditional_t<withElementSize, vector<u8>, tuple<>>, vector<u32>,
-        vector<u8>>
+        vector<u32>, vector<u8>>
       res;
-  auto &[polygon_sizes, polygon_indices, element_sizes, element_numbers,
-         surface_numbers] = res;
+  auto &[polygon_sizes, polygon_indices, element_sizes, node_numbers,
+         element_numbers, surface_numbers] = res;
   auto p = indices.begin();
   const auto e = indices.end();
   auto &map = get_element_polygons();
@@ -172,14 +175,16 @@ get_polygon(const vector<u32> &sizes, const vector<u32> &indices,
     auto &[polygon_size, polygon_vertex_indices] = map.at(sz);
     for (size_t i = 0; i < polygon_vertex_indices.size() / polygon_size; ++i) {
       polygon_sizes.push_back(polygon_size);
-      if constexpr (withElementNumber) {
-        element_numbers.push_back(number_map[i_element]);
-      }
+      if (withElementNumber)
+        element_numbers.push_back(element_number_map[i_element]);
+
       surface_numbers.push_back(i);
     }
     for (auto polygon_vertex_index : polygon_vertex_indices) {
       assert(polygon_vertex_index < sz);
       polygon_indices.push_back(*(p + polygon_vertex_index));
+      if (withNodeNumber)
+        node_numbers.push_back(node_number_map[*(p + polygon_vertex_index)]);
     }
     if constexpr (withElementSize) {
       assert(polygon_vertex_indices.size() <
@@ -221,6 +226,7 @@ static inline vector<u32> from_polygons(const vector<u32> &polygon_sizes,
     }
     p += size;
   }
+  assert(p == e);
   return res;
 }
 

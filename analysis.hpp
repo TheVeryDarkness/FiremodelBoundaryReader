@@ -260,33 +260,38 @@ static inline void select_patch(const vector<patch_info> &patches) {
   }
 }
 
-static inline void analyze(const vector<patch_info> &patches,
-                           const vector<frame> &frames,
-                           const vector<float> &nodes,
-                           const vector<u32> &element_sizes,
-                           const vector<u32> &element_indices,
-                           const vector<u32> &element_index_map) {
+static inline void
+analyze(const vector<patch_info> &patches, const vector<frame> &frames,
+        const tuple<vector<float>, vector<u32>, vector<u32>, vector<u32>,
+                    vector<u32>> &element_data) {
   vector<float> data;
   vector<u32> sizes;
+  auto &[nodes, element_sizes, element_indices, node_numbers, element_numbers] =
+      element_data;
 
   auto elem_avail = [&]() {
+    auto &[nodes, element_sizes, element_indices, node_numbers,
+           element_numbers] = element_data;
+
     return !nodes.empty() && !element_sizes.empty() && !element_indices.empty();
   };
 
-  /// polygon sizes, polygon indices, element sizes, element number ,surface
-  /// numbers
-  tuple<vector<u32>, vector<u32>, vector<u8>, vector<u32>, vector<u8>> polygons;
+  /// polygon sizes, polygon indices, element sizes, node number, element
+  /// number, surface numbers
+  tuple<vector<u32>, vector<u32>, vector<u8>, vector<u32>, vector<u32>,
+        vector<u8>>
+      polygons;
   bool polygons_calculated = false;
-  auto calculate_polygon = [
-    &element_sizes, &element_indices, &polygons, &element_index_map,
-    &calculated = polygons_calculated
-  ]() -> const auto & {
+  auto calculate_polygon =
+      [&element_data, &polygons, &calculated =
+       polygons_calculated ]() -> const auto & {
     if (!calculated) {
-      if (element_index_map.empty())
-        polygons = get_polygon<true, false>(element_sizes, element_indices, {});
-      else
-        polygons = get_polygon<true, true>(element_sizes, element_indices,
-                                           element_index_map);
+      auto &[nodes, element_sizes, element_indices, node_numbers,
+             element_numbers] = element_data;
+
+      polygons = get_polygon<true>(element_sizes, element_indices, node_numbers,
+                                   element_numbers);
+
       calculated = true;
     }
     return polygons;
@@ -296,53 +301,41 @@ static inline void analyze(const vector<patch_info> &patches,
   set<u32> nodes_on_boundary;
   bool nodes_on_boundary_calculated = false;
   auto calculate_node_on_boundary = [
-    &nodes, &patches, &element_sizes, &element_indices, &nodes_on_boundary,
-    &calculate_polygon, &calculated = nodes_on_boundary_calculated
+    &patches, &element_data, &nodes_on_boundary, &calculate_polygon,
+    &calculated = nodes_on_boundary_calculated
   ]() -> const auto & {
     if (!calculated) {
-      auto &[polygon_sizes, polygon_indices, _, element_numbers,
-             surface_numbers] = calculate_polygon();
+      auto &[nodes, element_sizes, element_indices, node_numbers_map,
+             element_numbers_map] = element_data;
+      auto &[polygon_sizes, polygon_indices, _, node_element_numbers,
+             polygon_element_numbers, surface_numbers] = calculate_polygon();
       nodes_on_boundary = node_on_boundary(patches, nodes);
       calculated = true;
     }
     return nodes_on_boundary;
   };
 
-  tuple<vector<u32>, vector<float>, vector<float>> node_data;
-  bool node_data_calculated = false;
-  auto calculate_node = [
-        &calculated = node_data_calculated, &node_data, &calculate_polygon,
-        &calculate_node_on_boundary, &patches, &nodes, &frames
-  ]() -> const auto & {
-    auto &indices_of_node_on_boundary = calculate_node_on_boundary();
-    if (!calculated) {
-      ;
-      calculated = true;
-    }
-    return node_data;
-  };
-
   // sizes_of_polygon_vertices_on_boundary,
   // indices_of_polygon_vertices_on_boundary,
+  // numbers_of_nodes_of_polygon_on_boundary
   // numbers_of_element_whose_polygon_on_boundary
   // numbers_of_surface_on_boundary
-  tuple<vector<u32>, vector<u32>, vector<u32>, vector<u8>> polygons_on_boundary;
+  tuple<vector<u32>, vector<u32>, vector<u32>, vector<u32>, vector<u8>>
+      polygons_on_boundary;
   bool polygons_on_boundary_calculated = false;
   auto calculate_polygon_on_boundary = [
-    &nodes, &patches, &element_sizes, &element_indices, &polygons_on_boundary,
-    &calculate_polygon, &calculated = polygons_on_boundary_calculated
+    &element_data, &patches, &polygons_on_boundary, &calculate_polygon,
+    &calculated = polygons_on_boundary_calculated
   ]() -> const auto & {
     if (!calculated) {
-      auto &[polygon_sizes, polygon_indices, element_sizes, element_numbers,
-             surface_numbers] = calculate_polygon();
-      if (element_numbers.empty())
-        polygons_on_boundary = polygon_on_boundary<false>(
-            patches, nodes, polygon_sizes, polygon_indices, element_numbers,
-            surface_numbers);
-      else
-        polygons_on_boundary = polygon_on_boundary<true>(
-            patches, nodes, polygon_sizes, polygon_indices, element_numbers,
-            surface_numbers);
+      auto &[nodes, element_sizes, element_indices, node_numbers,
+             element_numbers] = element_data;
+      auto &[polygon_sizes, polygon_indices, polygon_element_sizes,
+             polygon_node_numbers, polygon_element_numbers, surface_numbers] =
+          calculate_polygon();
+      polygons_on_boundary = polygon_on_boundary(
+          patches, nodes, polygon_sizes, polygon_indices, polygon_node_numbers,
+          polygon_element_numbers, surface_numbers);
       calculated = true;
     }
     return polygons_on_boundary;
@@ -354,17 +347,20 @@ static inline void analyze(const vector<patch_info> &patches,
   bool average_calculated = false;
   auto calculate_polygon_average = [
         &calculated = average_calculated, &polygons_average, &calculate_polygon,
-        &calculate_polygon_on_boundary, &patches, &nodes, &frames
+        &calculate_polygon_on_boundary, &patches, &element_data, &frames
   ]() -> const auto & {
-    auto &[polygon_sizes, polygon_indices, element_sizes, element_indices,
-           surface_numbers] = calculate_polygon();
+    auto &[polygon_sizes, polygon_indices, element_sizes, polygon_node_numbers,
+           polygon_element_numbers, surface_numbers] = calculate_polygon();
 
     auto &[sizes_of_polygon_vertices_on_boundary,
            indices_of_polygon_vertices_on_boundary,
+           indices_of_node_whose_polygon_on_boundary,
            indices_of_element_whose_polygon_on_boundary,
            numbers_of_surfaces_on_boundary] = calculate_polygon_on_boundary();
 
     if (!calculated) {
+      auto &[nodes, element_sizes, element_indices, node_numbers,
+             element_numbers] = element_data;
       polygons_average =
           polygon_average(patches, nodes, numbers_of_surfaces_on_boundary,
                           sizes_of_polygon_vertices_on_boundary,
@@ -470,13 +466,12 @@ d - Discard.
 #if GRAPHICS_ENABLED
     case 'y':
       if (selected_patch < patches.size() && elem_avail()) {
-        auto [polygon_sizes, polygon_indices, _0, _1, surface_numbers] =
-            get_polygon<false, false>(element_sizes, element_indices, {});
+        auto [polygon_sizes, polygon_indices, _0, _1, _2, surface_numbers] =
+            get_polygon<false>(element_sizes, element_indices, {}, {});
         auto [sizes_of_polygon_vertices_on_boundary,
-              indices_of_polygon_vertices_on_boundary, _2, _3] =
-            polygon_on_boundary<false>({patches[selected_patch]}, nodes,
-                                       polygon_sizes, polygon_indices, {},
-                                       surface_numbers);
+              indices_of_polygon_vertices_on_boundary, _3, _4, _5] =
+            polygon_on_boundary({patches[selected_patch]}, nodes, polygon_sizes,
+                                polygon_indices, {}, {}, surface_numbers);
 
         visualize_polygons(nodes, sizes_of_polygon_vertices_on_boundary,
                            indices_of_polygon_vertices_on_boundary);
@@ -502,10 +497,11 @@ d - Discard.
       break;
     case 'Y':
       if (!patches.empty() && elem_avail()) {
-        auto &[polygon_sizes, polygon_indices, _0, _1, _2] =
+        auto &[polygon_sizes, polygon_indices, _0, _1, _2, _3] =
             calculate_polygon();
         auto &[sizes_of_polygon_vertices_on_boundary,
                indices_of_polygon_vertices_on_boundary,
+               indices_of_node_whose_polygon_on_boundary,
                indices_of_element_whose_polygon_on_boundary, surface_numbers] =
             calculate_polygon_on_boundary();
 
@@ -585,7 +581,7 @@ d - Discard.
         const auto N = frames.size();
 
         auto &[on_boundary_vertex_sizes, on_boundary_vertex_indices,
-               element_numbers, surface_numbers] =
+               node_numbers, element_numbers, surface_numbers] =
             calculate_polygon_on_boundary();
         auto &[on_boundary_surface_numbers, _2, boundary_data] =
             calculate_polygon_average();
