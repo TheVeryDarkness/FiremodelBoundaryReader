@@ -1,5 +1,21 @@
 #pragma once
+
+#if !defined(GRAPHICS_ENABLED)
+#define GRAPHICS_ENABLED 1
+#endif // !defined(GRAPHICS_ENABLED)
+
+#if GRAPHICS_ENABLED
+#include <glad/glad.h>
+#include <glfw/glfw3.h>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
+#endif // GRAPHICS_ENABLED
+
+#if GRAPHICS_ENABLED
+#include "element_basic.hpp"
 #include "fds_basic.hpp"
+#include "shared.hpp"
 #include "types.hpp"
 #include <algorithm>
 #include <functional>
@@ -33,22 +49,6 @@ using std::remove_all_extents_t;
 using std::set;
 using std::tuple_element_t;
 using std::underlying_type_t;
-
-#if !defined(GRAPHICS_ENABLED)
-#define GRAPHICS_ENABLED 1
-#endif // !defined(GRAPHICS_ENABLED)
-
-#if GRAPHICS_ENABLED
-#include <glad/glad.h>
-#include <glfw/glfw3.h>
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
-#endif // GRAPHICS_ENABLED
-#include "element_basic.hpp"
-#include "shared.hpp"
-
-#if GRAPHICS_ENABLED
 
 template <typename> struct gl_type_enum;
 template <>
@@ -105,7 +105,8 @@ static inline double firstFrame = 0.0;
 static inline bool cursor_enabled = false;
 static inline bool index_loop = false;
 static inline size_t &current = selected_patch;
-static inline size_t index_max = 0;
+static inline size_t max_index() { return selected_patches.size(); };
+static inline void set_max_index(size_t m) { selected_patches.resize(m); };
 static inline float key_move_sensity = 4.f;
 
 static inline bool keyX[2] = {};
@@ -125,9 +126,13 @@ static inline void cameraMoveRight(float length) {
 }
 static inline void cameraRotateX(float radian) {
   cameraFront += glm::cross(cameraFront, cameraUp) * radian;
+  cameraFront /= glm::length(cameraFront);
 }
 static inline void cameraRotateY(float radian) {
   cameraFront += cameraUp * radian;
+  cameraFront /= glm::length(cameraFront);
+  cameraUp -= cameraFront;
+  cameraUp /= glm::length(cameraUp);
 }
 
 static inline void keyCameraMove(float deltaTime) {
@@ -172,16 +177,19 @@ static inline void onKey(GLFWwindow *window, const int key, int scancode,
       if (current > 0)
         --current;
       else if (index_loop)
-        current = index_max ? index_max - 1 : 0;
+        current = max_index() ? max_index() - 1 : 0;
     }
 
   if (key == GLFW_KEY_RIGHT_BRACKET)
     if (action == GLFW_PRESS || (continuous && action == GLFW_REPEAT)) {
-      if (current < index_max - 1) {
+      if (current < max_index() - 1) {
         ++current;
       } else if (index_loop)
         current = 0;
     }
+
+  if (key == GLFW_KEY_SPACE)
+    selected_patches[current] = !selected_patches[current];
 
   string title = std::to_string(current);
   glfwSetWindowTitle(window, title.c_str());
@@ -215,15 +223,8 @@ static inline void onMouseMove(GLFWwindow *window, double xposIn,
   xoffset *= sensitivity;
   yoffset *= sensitivity;
 
-  cameraFront += glm::cross(cameraFront, cameraUp) * xoffset;
-  cameraFront /= glm::length(cameraFront);
-
-  auto up = cameraUp;
-  cameraUp -= cameraFront * yoffset;
-  cameraFront += up * yoffset;
-
-  cameraUp /= glm::length(cameraUp);
-  cameraFront /= glm::length(cameraFront);
+  cameraRotateX(xoffset);
+  cameraRotateY(yoffset);
 }
 
 static inline GLfloat rate = 4;
@@ -234,7 +235,7 @@ static inline void onScroll(GLFWwindow *window, double xoffset,
   } else {
     GLfloat dx = (GLfloat)xoffset * rate;
     GLfloat dy = (GLfloat)yoffset * rate;
-    cameraPos += cameraFront * dy;
+    cameraMoveForward(dy);
   }
 }
 
@@ -401,10 +402,6 @@ static inline bool visualization_settings() {
          << "F - Fullscreen:           " << fullScreen << endl
          << "W - Window width:         " << windowWidth << endl
          << "H - Window height:        " << windowHeight << endl
-         << "C - Cell size:            " << mesh.cell_size << endl
-         << "X - Origin x:             " << mesh.x0 << endl
-         << "Y - Origin y:             " << mesh.y0 << endl
-         << "Z - Origin z:             " << mesh.z0 << endl
          << "Options:" << endl
          << "h - Show graphics help." << endl
          << "g - Start patch visualiztion." << endl
@@ -443,18 +440,6 @@ static inline bool visualization_settings() {
     case 'k': {
       cout << "Key move sensity: ";
       cin >> key_move_sensity;
-    } break;
-    case 'C': {
-      cin >> mesh.cell_size;
-    } break;
-    case 'X': {
-      cin >> mesh.x0;
-    } break;
-    case 'Y': {
-      cin >> mesh.y0;
-    } break;
-    case 'Z': {
-      cin >> mesh.z0;
     } break;
     case 'h': {
       cout << R"(
@@ -898,7 +883,7 @@ constexpr static inline float defaultNear = .01f;
 constexpr static inline float defaultFar = 1000.f;
 
 static inline int visualize_patch(const vector<patch_info> &patches) {
-  index_max = patches.size();
+  set_max_index(patches.size());
 
   while (true) {
     if (!visualization_settings())
@@ -917,6 +902,7 @@ static inline int visualize_patch(const vector<patch_info> &patches) {
         {fragmentShaderSource}, type_list<GLuint[3], GLuint>{});
   }
 }
+
 static inline int visualize_regions(const regions &rgns) {
 
   while (true) {
@@ -939,7 +925,8 @@ static inline int visualize_frames(const vector<patch_info> &patches,
                                    const vector<frame> &frames,
                                    data_category category) {
   assert(!frames.empty());
-  index_max = frames.size();
+  set_max_index(frames.size());
+
   while (true) {
     if (!visualization_settings())
       return 0;
@@ -1084,7 +1071,7 @@ static inline int visualize_nodes(const vector<float> &nodes,
 
   const auto nodes_count = nodes.size() / 3;
   assert(data.size() == frames_count * nodes_count);
-  index_max = frames_count;
+  set_max_index(frames_count);
 
   static vector<float> data_slice;
   data_slice.reserve(nodes_count);

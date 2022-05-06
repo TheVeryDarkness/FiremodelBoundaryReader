@@ -127,7 +127,7 @@ static inline void print_header(ostream &o, const array<char, 30 + 1> &label,
 static inline void print_patches(ostream &o, const vector<patch_info> patches) {
   constexpr auto int_len = numeric_limits<i32>::digits10 + 1;
   constexpr auto uint_len = numeric_limits<u32>::digits10 + 1;
-  o << setw(uint_len) << "I1"
+  o << setw(uint_len) << "INDEX" << setw(uint_len) << "I1"
     << " " << setw(uint_len) << "I2"
     << " " << setw(uint_len) << "J1"
     << " " << setw(uint_len) << "J2"
@@ -138,8 +138,11 @@ static inline void print_patches(ostream &o, const vector<patch_info> patches) {
     << " " << setw(uint_len) << "MESH_INDEX"
     << " " << setw(uint_len) << "SIZE"
     << " " << endl;
-  for (const auto &patch : patches)
-    o << patch << endl;
+  u32 i_patch = 0;
+  for (const auto &patch : patches) {
+    o << setw(uint_len) << i_patch << patch << endl;
+    ++i_patch;
+  }
 }
 
 static inline void print_frames(ostream &o, const vector<frame> frames) {

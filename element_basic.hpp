@@ -1,11 +1,16 @@
 #pragma once
 #include "types.hpp"
 #include <algorithm>
+#include <iostream>
 #include <map>
 #include <numeric>
+#include <set>
 using std::accumulate;
+using std::cerr;
+using std::conditional_t;
 using std::initializer_list;
 using std::map;
+using std::set;
 using std::tuple;
 
 // Thanks to https://www.mm.bme.hu/

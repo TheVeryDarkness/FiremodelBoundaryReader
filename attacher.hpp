@@ -1,6 +1,32 @@
 #pragma once
 #include "elements_io.hpp"
 
+static inline void mesh_settings() {
+  cout << "C - Cell size:            " << mesh.cell_size << endl
+       << "X - Origin x:             " << mesh.x0 << endl
+       << "Y - Origin y:             " << mesh.y0 << endl
+       << "Z - Origin z:             " << mesh.z0 << endl;
+  char opt = 'd';
+  cin >> opt;
+  switch (opt) {
+  case 'C': {
+    cin >> mesh.cell_size;
+  } break;
+  case 'X': {
+    cin >> mesh.x0;
+  } break;
+  case 'Y': {
+    cin >> mesh.y0;
+  } break;
+  case 'Z': {
+    cin >> mesh.z0;
+  } break;
+  default:
+    cout << "Option not found." << endl;
+    break;
+  }
+}
+
 static inline void attach(const vector<patch_info> &patches,
                           const vector<frame> &frames,
                           const tuple<vector<float>, vector<u32>, vector<u32>,
@@ -109,17 +135,12 @@ static inline void attach(const vector<patch_info> &patches,
   };
 
   while (true) {
-    cout << R"(
-Commands:
-m - Show current dimensions.
-P - Set default float-point number precision.
-w - Input in console to overlap current result.
-S - Sample.
-c - Read CSV file as current result.)";
 
     if (!patches.empty())
       cout << R"(
 s - Select a patch.
+S - Settings.
+p - Visulize patches and select some.
 M - Visualize merged patches.)";
 
 #if GRAPHICS_ENABLED
@@ -149,6 +170,11 @@ d - Discard.
       return;
     case 's':
       select_patch(patches);
+      break;
+    case 'p':
+      visualize_patch(patches);
+      break;
+    case 'S':
       break;
 #if GRAPHICS_ENABLED
     case 'y':

@@ -142,6 +142,7 @@ constexpr static inline bool compare(const array<char, 30 + 1> &a,
 }
 
 static inline size_t selected_patch = 0;
+static inline vector<u16> selected_patches = {};
 
 constexpr static inline data_category
 get_data_category(const array<char, 30 + 1> &units) {
