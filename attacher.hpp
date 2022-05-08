@@ -27,6 +27,38 @@ static inline void mesh_settings() {
   }
 }
 
+template <typename Callable>
+static inline void input_patch_indices(Callable &&callable, u32 max) {
+  while (true) {
+    u32 i = max;
+    cin >> i;
+    if (i < max)
+      callable(i);
+  }
+}
+
+static inline void select_patches() {
+  while (true) {
+    cout << "T - Select some patches.\n"
+            "F - Unselect some patches.\n"
+            "R - Reverse selection of some patches.\n"
+            "d - discard.\n";
+    char opt = 'd';
+    switch (opt) {
+    case 'T':
+      break;
+    case 'F':
+      break;
+    case 'R':
+      break;
+    case 'd':
+      return;
+    default:
+      break;
+    }
+  }
+}
+
 static inline void attach(const vector<patch_info> &patches,
                           const vector<frame> &frames,
                           const tuple<vector<float>, vector<u32>, vector<u32>,
@@ -140,7 +172,9 @@ static inline void attach(const vector<patch_info> &patches,
       cout << R"(
 s - Select a patch.
 S - Settings.
-p - Visulize patches and select some.
+p - Visulize patches.
+P - Visulize patches and select some.
+l - Select patches.
 M - Visualize merged patches.)";
 
 #if GRAPHICS_ENABLED
@@ -174,7 +208,11 @@ d - Discard.
     case 'p':
       visualize_patch(patches);
       break;
+    case 'P':
+      visualize_patch_selection(patches);
+      break;
     case 'S':
+      mesh_settings();
       break;
 #if GRAPHICS_ENABLED
     case 'y':

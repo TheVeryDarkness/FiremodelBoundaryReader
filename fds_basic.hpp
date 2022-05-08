@@ -271,6 +271,18 @@ from_patches(const vector<patch_info> &patches, bool wireframe) {
   return res;
 }
 
+static inline vector<u16> from_patches_selection(const vector<u16> &selection) {
+  vector<u16> res;
+
+  res.reserve(selection.size() * 4);
+
+  for (auto sel : selection)
+    for (size_t i = 0; i < 4; ++i)
+      res.push_back(sel);
+
+  return res;
+}
+
 static inline vector<float> from_frame(const frame &frame, u32 size) {
   vector<float> res;
   res.reserve(size);

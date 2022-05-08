@@ -47,13 +47,21 @@ using std::min;
 using std::numeric_limits;
 using std::remove_all_extents_t;
 using std::set;
+using std::tuple_cat;
 using std::tuple_element_t;
 using std::underlying_type_t;
 
 template <typename> struct gl_type_enum;
+
 template <>
 struct gl_type_enum<GLuint> : integral_constant<GLenum, GL_UNSIGNED_INT> {};
 template <> struct gl_type_enum<GLint> : integral_constant<GLenum, GL_INT> {};
+
+template <>
+struct gl_type_enum<GLushort> : integral_constant<GLenum, GL_UNSIGNED_SHORT> {};
+template <>
+struct gl_type_enum<GLshort> : integral_constant<GLenum, GL_SHORT> {};
+
 template <>
 struct gl_type_enum<GLfloat> : integral_constant<GLenum, GL_FLOAT> {};
 template <>
@@ -131,7 +139,7 @@ static inline void cameraRotateX(float radian) {
 static inline void cameraRotateY(float radian) {
   cameraFront += cameraUp * radian;
   cameraFront /= glm::length(cameraFront);
-  cameraUp -= cameraFront;
+  cameraUp -= cameraFront * radian;
   cameraUp /= glm::length(cameraUp);
 }
 
@@ -189,7 +197,8 @@ static inline void onKey(GLFWwindow *window, const int key, int scancode,
     }
 
   if (key == GLFW_KEY_SPACE)
-    selected_patches[current] = !selected_patches[current];
+    if (action == GLFW_PRESS)
+      selected_patches[current] = !selected_patches[current];
 
   string title = std::to_string(current);
   glfwSetWindowTitle(window, title.c_str());
@@ -446,6 +455,7 @@ static inline bool visualization_settings() {
 Press TAB to enable or disable cursor.
 Press CAPS to enable or disable continuous key input.
 Press [ or ] to change current highlighted patch.
+Press SPACE to select or unselect current highlighted patch.
 Press ESC to terminate.
 Move mouse to rotate the camera when cursor is disabled.
 Direction key to move.
@@ -776,6 +786,9 @@ layout(location = 1) in float data;
 uniform float min;
 uniform float max;
 )";
+  const char *selected = R"(
+layout(location = 2) in float unselected;
+)";
   const char *highlight = R"(
 uniform uint highlighted;
 )";
@@ -809,6 +822,21 @@ void main() {
   color = vec4(.8f, .1f, .0f, .8f);
  } else {
   color = vec4(.6f, .6f, .6f, .3f);
+ }
+)";
+  const char *main_select_some = R"(
+ if (highlighted == data) {
+  if (unselected) {
+   color = vec4(.1f, .1f, .8f, .8f);
+  } else {
+   color = vec4(.8f, .1f, .0f, .8f);
+  }
+ } else {
+  if (unselected) {
+   color = vec4(.4f, .4f, .4f, .3f);
+  } else {
+   color = vec4(.6f, .2f, .0f, .8f);
+  }
  }
 )";
   const char *main_default_color = R"(
@@ -881,6 +909,34 @@ static inline float region_far(const regions &regions) {
 
 constexpr static inline float defaultNear = .01f;
 constexpr static inline float defaultFar = 1000.f;
+
+static inline int visualize_patch_selection(const vector<patch_info> &patches) {
+  set_max_index(patches.size());
+
+  while (true) {
+    if (!visualization_settings())
+      return 0;
+
+    visualize<GLuint, 2>(
+        [&patches]() {
+          auto [p, i] = from_patches<true>(patches, wireframe);
+          return make_tuple(
+              tuple_cat(std::move(p),
+                        make_tuple(from_patches_selection(selected_patches))),
+              std::move(i));
+        },
+        []() -> auto{ return from_patches_selection(selected_patches); },
+        [&patches]() -> tuple<float, float> {
+          return {defaultNear, patch_far(patches)};
+        },
+        defaultDrawMode, nullptr, nullptr,
+        {vertexShaderSource.head_pos_pv_color, vertexShaderSource.data,
+         vertexShaderSource.selected, vertexShaderSource.highlight,
+         vertexShaderSource.main_begin, vertexShaderSource.main_select_some,
+         vertexShaderSource.main_end},
+        {fragmentShaderSource}, type_list<GLuint[3], GLuint, GLushort>{});
+  }
+}
 
 static inline int visualize_patch(const vector<patch_info> &patches) {
   set_max_index(patches.size());

@@ -359,7 +359,8 @@ N - Visualize nodes and patches geometry.)";
 
     if (!patches.empty() && !frames.empty())
       cout << R"(
-a - Analyze patch data.)";
+a - Analyze patch data.
+A - Attach patch data.)";
 
     cout << endl;
   };
