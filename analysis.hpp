@@ -629,11 +629,14 @@ d - Discard.
         if (t < frames.front().time || t > frames.back().time)
           cerr << "Out of border. Terminated.\n";
         else
-          for (size_t i = 0; i + 1 < frames.size(); ++i)
+          for (size_t i = 0; i < frames.size(); ++i)
             if (t < frames[i].time) {
+              assert(i > 0);
               auto last = frames[i - 1].data[selected_patch].data;
               const auto &next = frames[i].data[selected_patch].data;
               interlop(last, next, frames[i].time - t, t - frames[i - 1].time);
+              clog << '[' << frames[i - 1].time << " - " << frames[i].time
+                   << "]\n";
               auto &patch = patches[selected_patch];
               data_and_size.push_back(
                   make_pair(std::move(last),
@@ -641,6 +644,7 @@ d - Discard.
               break;
             } else if (t == frames[i].time) {
               auto &patch = patches[selected_patch];
+              clog << '[' << frames[i - 1].time << "]\n";
               data_and_size.push_back(
                   make_pair(frames[i].data[selected_patch].data,
                             vector<u32>{patch.K(), patch.J(), patch.I()}));
@@ -649,9 +653,9 @@ d - Discard.
       }
       break;
     case 'f':
-      if (!data_and_size.empty() && !frames.empty() &&
-          selected_patch < patches.size()) {
-        auto &[data, sizes] = data_and_size.back();
+      if (!frames.empty() && selected_patch < patches.size()) {
+        auto item = make_pair(vector<float>{}, vector<u32>{});
+        auto &[data, sizes] = item;
         const auto &patch = patches[selected_patch];
         cout << "Frame index: ";
         auto f = frames.size();
@@ -662,12 +666,13 @@ d - Discard.
         }
         data = frames[f].data[selected_patch].data;
         sizes = {patch.K(), patch.J(), patch.I()};
+        data_and_size.push_back(std::move(item));
       }
       break;
     case 'F':
-      if (!data_and_size.empty() && !frames.empty() &&
-          selected_patch < patches.size()) {
-        auto &[data, sizes] = data_and_size.back();
+      if (!frames.empty() && selected_patch < patches.size()) {
+        auto item = make_pair(vector<float>{}, vector<u32>{});
+        auto &[data, sizes] = item;
         const auto &patch = patches[selected_patch];
         sizes = {(u32)frames.size(), patch.K(), patch.J(), patch.I()};
         data.clear();
@@ -676,6 +681,7 @@ d - Discard.
           const auto &patch = frame.data[selected_patch];
           data.insert(data.cend(), patch.data.cbegin(), patch.data.cend());
         }
+        data_and_size.push_back(std::move(item));
       }
       break;
     default:
