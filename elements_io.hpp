@@ -14,7 +14,6 @@
 
 using std::cerr;
 using std::char_traits;
-using std::cout;
 using std::endl;
 using std::getline;
 using std::ifstream;
@@ -197,6 +196,8 @@ a - ANSYS mapdl file.
     return std::move(nodes);
   } break;
   default:
+    COMMAND_NOT_FOUND;
+  case 'd':
     return {};
   }
 }
@@ -304,6 +305,8 @@ a - ANSYS mapdl file.
             move(element_numbers)};
   }
   default:
+    COMMAND_NOT_FOUND;
+  case 'd':
     return {};
   }
 }

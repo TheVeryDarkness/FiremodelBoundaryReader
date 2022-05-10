@@ -179,7 +179,8 @@ get_polygon(const vector<u32> &sizes, const vector<u32> &indices,
   for (auto sz : sizes) {
     assert(p < e);
     auto &[polygon_size, polygon_vertex_indices] = map.at(sz);
-    for (size_t i = 0; i < polygon_vertex_indices.size() / polygon_size; ++i) {
+    for (u8 i = 0; i < polygon_vertex_indices.size() / polygon_size;
+         assert(i != numeric_limits<u8>::max()), ++i) {
       polygon_sizes.push_back(polygon_size);
       if (withElementNumber)
         element_numbers.push_back(element_number_map[i_element]);

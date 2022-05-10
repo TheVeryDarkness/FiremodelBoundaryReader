@@ -31,7 +31,6 @@
 
 using std::char_traits;
 using std::conditional_t;
-using std::cout;
 using std::endl;
 using std::getline;
 using std::hex;
@@ -98,7 +97,7 @@ d - Discard.
     case 'd':
       return;
     default:
-      cout << "Option not found." << endl;
+      COMMAND_NOT_FOUND;
       break;
     }
   }
@@ -121,7 +120,7 @@ d - discard.
       u32 f = 0;
       cin >> f;
       if (f >= frames.size()) {
-        cout << "Not a valid frame." << endl;
+        cerr << "Not a valid frame." << endl;
         break;
       }
       cout << "Frame " << f << " is at " << frames[f].time << "s." << endl;
@@ -132,7 +131,7 @@ d - discard.
     case 'd':
       return;
     default:
-      cout << "Option not found." << endl;
+      COMMAND_NOT_FOUND;
       break;
     }
   }
@@ -154,7 +153,7 @@ d - discard.
       u32 p = 0;
       cin >> p;
       if (p >= patches.size()) {
-        cout << "Not a valid patch." << endl;
+        cerr << "Not a valid patch.\n";
         break;
       }
       cout << "Patch " << p << ": " << patches[p] << endl;
@@ -162,7 +161,7 @@ d - discard.
     case 'd':
       return;
     default:
-      cout << "Option not found." << endl;
+      COMMAND_NOT_FOUND;
       break;
     }
   }
@@ -211,7 +210,7 @@ q - quit
         auto fin = ifstream(entry.path(), ios::binary);
         if (fin.is_open())
           return fin;
-        cout << "Failed to open." << endl;
+        FILE_OPEN_FAILED;
       }
     } break;
     case 'c': {
@@ -229,7 +228,7 @@ q - quit
         auto fin = ifstream(f, ios::binary);
         if (fin.is_open())
           return fin;
-        cout << "Failed to open." << endl;
+        FILE_OPEN_FAILED;
       }
     } break;
     case 'p': {
@@ -239,7 +238,7 @@ q - quit
       return {};
     }
     default:
-      cout << "Command not found." << endl;
+      COMMAND_NOT_FOUND;
     case 'h': {
       cout << help;
     } break;
@@ -284,6 +283,8 @@ d - Discard.
             std::move(patches), std::move(frames)};
   } break;
   default:
+    COMMAND_NOT_FOUND;
+  case 'd':
     return {};
   }
 }
@@ -380,7 +381,7 @@ A - Attach patch data.)";
     case 'e': {
       elements_data = read_nodes_and_elements();
       if (!elem_available()) {
-        cout << "Element data not valid." << endl;
+        clog << "Element data not valid." << endl;
       }
     }; break;
     case 'r': {
@@ -390,7 +391,7 @@ A - Attach patch data.)";
       auto &fin = in.value();
       fin.peek();
       if (!fin) {
-        cout << "Failed to open the file." << endl;
+        FILE_OPEN_FAILED;
       }
       frames.clear();
       data = read_file_with_mode(fin);
@@ -418,7 +419,7 @@ A - Attach patch data.)";
       break;
 #endif // GRAPHICS_ENABLED
     case 'b': {
-      print_header(cout, label, bar_label, units);
+      print_header(cout.original(), label, bar_label, units);
     } break;
     case 'a': {
       analyze(patches, frames);
@@ -428,7 +429,7 @@ A - Attach patch data.)";
     } break;
     case 'f': {
       if (!frames.empty())
-        print_frames(cout, frames);
+        print_frames(cout.original(), frames);
       else
         goto CMDNF;
     } break;
@@ -450,7 +451,7 @@ A - Attach patch data.)";
 #endif // GRAPHICS_ENABLED
     case 'p': {
       if (!patches.empty())
-        print_patches(cout, patches);
+        print_patches(cout.original(), patches);
       else
         goto CMDNF;
     } break;
@@ -484,7 +485,7 @@ A - Attach patch data.)";
       break;
     default:
     CMDNF:
-      cout << "Command not found." << endl;
+      COMMAND_NOT_FOUND;
       help();
       break;
     }

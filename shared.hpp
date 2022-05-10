@@ -131,9 +131,9 @@ static inline void check_border(const vector<patch_info> &patches,
   float Zmin = mesh.z0 + Kmin * mesh.cell_size;
   float Zmax = mesh.z0 + Kmax * mesh.cell_size;
 
-  cout << "Nodes:  [" << xmin << ", " << xmax << "]*[" << ymin << ", " << ymax
+  clog << "Nodes:  [" << xmin << ", " << xmax << "]*[" << ymin << ", " << ymax
        << "]*[" << zmin << ", " << zmax << "]" << endl;
-  cout << "Meshes: [" << Xmin << ", " << Xmax << "]*[" << Ymin << ", " << Ymax
+  clog << "Meshes: [" << Xmin << ", " << Xmax << "]*[" << Ymin << ", " << Ymax
        << "]*[" << Zmin << ", " << Zmax << "]" << endl;
 }
 

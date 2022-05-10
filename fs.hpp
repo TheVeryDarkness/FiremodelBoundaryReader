@@ -3,7 +3,6 @@
 #include <filesystem>
 #include <iostream>
 #include <optional>
-using std::cout;
 using std::endl;
 using std::optional;
 using std::vector;
@@ -23,7 +22,7 @@ request_file_by_id(directory_iterator di, Pred &&pred, const char *type) {
       ++i;
     }
   if (entries.empty()) {
-    cout << "No " << type << " found." << endl;
+    clog << "No " << type << " found." << endl;
     return {};
   }
   cout << "There are " << entries.size() << " " << type << " in total." << endl;
@@ -31,7 +30,7 @@ request_file_by_id(directory_iterator di, Pred &&pred, const char *type) {
   cin >> i;
   if (i < entries.size())
     return entries[i];
-  cout << "Not a valid index." << endl;
+  clog << "Not a valid index." << endl;
   return {};
 }
 
@@ -46,6 +45,6 @@ static inline optional<path> request_file_by_name(Pred &&pred,
   path p = s;
   if (pred(p))
     return p;
-  cout << "Not " << type << "." << endl;
+  clog << "Not " << type << "." << endl;
   return {};
 }

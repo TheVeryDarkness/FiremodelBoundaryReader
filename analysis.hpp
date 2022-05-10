@@ -14,7 +14,6 @@
 #include <vector>
 
 using std::conditional_t;
-using std::cout;
 using std::decay_t;
 using std::endl;
 using std::ifstream;
@@ -91,7 +90,7 @@ from_csv(istream &in, const char (&sep)[sz] = ",") {
 
 static inline void print_patch(const vector<float> &data, u32 m, u32 n) {
   cout << endl;
-  as_csv(cout, data, m, n, " ");
+  as_csv(cout.original(), data, m, n, " ");
 }
 
 static inline void save_patch_as_binary(const vector<float> &data,
@@ -164,13 +163,14 @@ static inline void analysis_settings() {
     cin >> disableDataCheck;
     break;
   default:
+    COMMAND_NOT_FOUND;
     break;
   }
 }
 
 static inline tuple<u32, u32> get_matrix_size(const vector<u32> &sizes) {
   if (sizes.size() > 2) {
-    cout << "Data dimension " << sizes.size() << " > 2." << endl;
+    cerr << "Data dimension " << sizes.size() << " > 2." << endl;
     return {0, 0};
   } else if (sizes.size() == 0) {
     return {0, 1};
@@ -361,6 +361,7 @@ w - Input in console to overlap current result.
 y - Apply math functions to all cells in current result.
 l - Flatten current result to specified dimension.
 a - Calculate average on specified dimension of current result.
+b - Calculate border of current result.
 p - Print current result to console.
 B - Save current result as binary to file.
 C - Save current result as CSV file.
@@ -467,11 +468,12 @@ d - Discard.
         auto &[data, sizes] = data_and_size.back();
         if (sizes.empty())
           break;
+        auto &out = cout.original();
         auto begin = sizes.cbegin(), end = sizes.cend();
-        cout << *begin;
+        out << *begin;
         ++begin;
         for (; begin != end; ++begin)
-          cout << '*' << *begin;
+          out << '*' << *begin;
       }
       break;
     case 'p':
@@ -495,7 +497,7 @@ d - Discard.
         size_t dimension = -1;
         cin >> dimension;
         if (dimension >= sizes.size() || sizes.size() == 1) {
-          cout << "Dimension invalid." << endl;
+          cerr << "Dimension invalid." << endl;
           break;
         }
         const auto sz = sizes[dimension];
@@ -532,7 +534,7 @@ d - Discard.
         getline(cin, path);
         ofstream fout(path, ios::binary);
         if (!fout) {
-          cout << "Failed to open file." << endl;
+          FILE_OPEN_FAILED;
           break;
         }
         save_patch_as_binary(data, sizes, fout);
@@ -547,7 +549,7 @@ d - Discard.
           auto &path = opt.value();
           ifstream fin = ifstream(path);
           if (!fin) {
-            cout << "Failed to open file." << endl;
+            FILE_OPEN_FAILED;
             break;
           }
 
@@ -567,7 +569,7 @@ d - Discard.
         auto &path = opt.value();
         ofstream fout(path);
         if (!fout) {
-          cout << "Failed to open file." << endl;
+          FILE_OPEN_FAILED;
           break;
         }
 
@@ -591,8 +593,8 @@ d - Discard.
         cin >> d;
         reduce_dimension(sizes, d);
         if (sizes.size() > d)
-          cout << "Flattening failed. Current dimension is " << sizes.size()
-               << "." << endl;
+          cerr << "Flattening failed. Current dimension is " << sizes.size()
+               << ".\n";
       }
       break;
     case 'a':
@@ -602,11 +604,18 @@ d - Discard.
         size_t dimension = -1;
         cin >> dimension;
         if (dimension >= sizes.size() || sizes.size() == 1) {
-          cout << "Dimension invalid." << endl;
+          cerr << "Dimension invalid.\n";
           break;
         }
         data = average(data, sizes, dimension);
         sizes.erase(sizes.cbegin() + dimension);
+      }
+      break;
+    case 'b':
+      if (!data_and_size.empty()) {
+        const auto &[data, size] = data_and_size.back();
+        auto [pmin, pmax] = minmax_element(data.begin(), data.end());
+        clog << "Range: " << *pmin << " - " << *pmax << '\n';
       }
       break;
     case 'L':
@@ -635,8 +644,8 @@ d - Discard.
               auto last = frames[i - 1].data[selected_patch].data;
               const auto &next = frames[i].data[selected_patch].data;
               interlop(last, next, frames[i].time - t, t - frames[i - 1].time);
-              clog << '[' << frames[i - 1].time << " - " << frames[i].time
-                   << "]\n";
+              clog << "Time: " << frames[i - 1].time << ", " << frames[i].time
+                   << "\n";
               auto &patch = patches[selected_patch];
               data_and_size.push_back(
                   make_pair(std::move(last),
@@ -644,7 +653,7 @@ d - Discard.
               break;
             } else if (t == frames[i].time) {
               auto &patch = patches[selected_patch];
-              clog << '[' << frames[i - 1].time << "]\n";
+              clog << "Time: " << frames[i - 1].time << "\n";
               data_and_size.push_back(
                   make_pair(frames[i].data[selected_patch].data,
                             vector<u32>{patch.K(), patch.J(), patch.I()}));
@@ -661,7 +670,7 @@ d - Discard.
         auto f = frames.size();
         cin >> f;
         if (f >= frames.size()) {
-          cout << "Frame index invalid." << endl;
+          cerr << "Frame index invalid." << endl;
           break;
         }
         data = frames[f].data[selected_patch].data;
@@ -685,6 +694,7 @@ d - Discard.
       }
       break;
     default:
+      COMMAND_NOT_FOUND;
       break;
     }
   }

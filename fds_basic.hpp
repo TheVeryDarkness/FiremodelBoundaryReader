@@ -215,6 +215,7 @@ from_patches(const vector<patch_info> &patches, bool wireframe) {
         indices.push_back(N + 0);
         break;
       default:
+        assert(false);
         break;
       }
     } else {
@@ -241,6 +242,7 @@ from_patches(const vector<patch_info> &patches, bool wireframe) {
         indices.push_back(N + 3);
         break;
       default:
+        assert(false);
         break;
       }
     }

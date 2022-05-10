@@ -28,7 +28,6 @@
 using std::accumulate;
 using std::cerr;
 using std::clog;
-using std::cout;
 using std::decay_t;
 using std::endl;
 using std::extent_v;
@@ -283,7 +282,7 @@ static inline void onGLDebugMessage(GLenum source, GLenum type, unsigned int id,
     clog << "Source: Other";
     break;
   }
-  std::cout << std::endl;
+  clog << std::endl;
 
   switch (type) {
   case GL_DEBUG_TYPE_ERROR:
@@ -469,7 +468,7 @@ Scroll to modify the scroll sensity when cursor is enabled.
     case 'd':
       return false;
     default:
-      cout << "Option not found." << endl;
+      COMMAND_NOT_FOUND;
       break;
     }
   }
@@ -567,7 +566,7 @@ static inline int visualize(GetData &&getData,
   GLFWwindow *window = glfwCreateWindow(windowWidth, windowHeight,
                                         "BoundaryReader", monitor, NULL);
   if (window == NULL) {
-    cout << "Failed to create GLFW window." << endl;
+    cerr << "Failed to create GLFW window." << endl;
     glfwTerminate();
     return -1;
   }
@@ -581,7 +580,7 @@ static inline int visualize(GetData &&getData,
   glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
   if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
-    cout << "Failed to initialize GLAD." << endl;
+    cerr << "Failed to initialize GLAD." << endl;
     return -1;
   }
 

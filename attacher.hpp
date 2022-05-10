@@ -22,7 +22,7 @@ static inline void mesh_settings() {
     cin >> mesh.z0;
   } break;
   default:
-    cout << "Option not found." << endl;
+    COMMAND_NOT_FOUND;
     break;
   }
 }
@@ -54,6 +54,7 @@ static inline void select_patches() {
     case 'd':
       return;
     default:
+      COMMAND_NOT_FOUND;
       break;
     }
   }
@@ -304,7 +305,7 @@ d - Discard.
           break;
         auto out = ofstream(opt1.value());
         if (!out) {
-          cout << "Open Failed." << endl;
+          FILE_OPEN_FAILED;
         }
         if (!opt2)
           break;
@@ -312,7 +313,7 @@ d - Discard.
         if (!exists(dir)) {
           auto suc = create_directory(dir);
           if (!suc) {
-            cout << "Create Failed." << endl;
+            DIRECTORY_CREATE_FAILED;
           }
         }
         out << "/PREP7" << endl;
@@ -366,6 +367,7 @@ d - Discard.
       }
       break;
     default:
+      COMMAND_NOT_FOUND;
       break;
     }
   }
