@@ -626,7 +626,7 @@ d - Discard.
           float a = 1.f;
           float b = 0.f;
           cin >> a >> b;
-          if (b == 0.0f)
+          if (b != 0.0f)
             interlop(data_and_size.back().first, latter.first, a, b);
         }
       }
