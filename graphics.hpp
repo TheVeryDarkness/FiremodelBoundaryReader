@@ -111,7 +111,7 @@ static inline double firstFrame = 0.0;
 
 static inline bool cursor_enabled = false;
 static inline bool index_loop = false;
-static inline size_t &current = selected_patch;
+static inline u32 &current = selected_patch;
 static inline size_t max_index() { return selected_patches.size(); };
 static inline void set_max_index(size_t m) { selected_patches.resize(m); };
 static inline float key_move_sensity = 4.f;
@@ -977,10 +977,11 @@ static inline int visualize_regions(const regions &rgns) {
   }
 }
 static inline int visualize_frames(const vector<patch_info> &patches,
-                                   const vector<frame> &frames,
+                                   const fds_boundary_file &frames,
                                    data_category category) {
-  assert(!frames.empty());
-  set_max_index(frames.size());
+  assert(!frames.times.empty());
+  assert(!frames.data.empty());
+  set_max_index(frames.times.size());
 
   while (true) {
     if (!visualization_settings())
@@ -990,18 +991,17 @@ static inline int visualize_frames(const vector<patch_info> &patches,
         [&patches, &frames ]() -> auto{
           glPointSize(10);
 
-          return from_data(patches, frames.front());
+          return from_data(patches, frames, 0);
         },
         [&frames]() -> vector<float> {
-          auto i = current % frames.size();
-          auto &frame = frames[i];
-          return from_frame(frame, 0);
+          auto i = current % frames.times.size();
+          return from_frame(frames, i, 0);
         },
         [&patches]() constexpr->tuple<float, float> {
           return {defaultNear, patch_far(patches)};
         },
         []() { return GL_POINTS; },
-        [&frames]() { return frame_minmax(frames.back()); }, nullptr,
+        [&frames]() { return frames_minmax(frames); }, nullptr,
         {vertexShaderSource.head_pos_pv_color, vertexShaderSource.data,
          vertexShaderSource.main_begin, vertexShaderSource.main_data_to_rgb,
          vertexShaderSource.main_end},

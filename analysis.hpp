@@ -341,10 +341,12 @@ static inline void interlop(vector<float> &a, const vector<float> &b, float wa,
 }
 
 static inline void analyze(const vector<patch_info> &patches,
-                           const vector<frame> &frames) {
+                           const fds_boundary_file &frames) {
   vector<pair<vector<float>, vector<u32>>> data_and_size;
   // vector<float> data;
   // vector<u32> sizes;
+
+  const auto frames_empty = frames.data.empty();
 
   while (true) {
     cout << R"(
@@ -384,7 +386,7 @@ L - Interlop.)";
 s - Select a patch.
 M - Visualize merged patches.)";
 
-    if (!frames.empty() && selected_patch < patches.size())
+    if (!frames_empty && selected_patch < patches.size())
       cout <<
           R"(
 f - Copy patch data in a frame as current result.
@@ -418,20 +420,38 @@ d - Discard.
       if (!data_and_size.empty()) {
         float val = 0.f;
         cin >> val;
-        for (auto &cell : data_and_size.back().first) {
-          if (isnan(cell))
+        size_t i = 0;
+        for (auto &cell : data_and_size.back().first)
+          if (isnan(cell)) {
             cell = val;
-        }
+            ++i;
+          }
+        clog << "Replaced " << i << " nan with " << val;
       }
       break;
     case 'N':
       if (!data_and_size.empty()) {
         float val = 0.f;
         cin >> val;
-        for (auto &cell : data_and_size.back().first) {
-          if (isinf(cell))
+        size_t i = 0;
+        for (auto &cell : data_and_size.back().first)
+          if (isinf(cell)) {
             cell = val;
-        }
+            ++i;
+          }
+        clog << "Replaced " << i << " inf with " << val;
+      }
+      break;
+    case 'z':
+      if (!data_and_size.empty()) {
+        size_t i = 0;
+        for (auto &cell : data_and_size.back().first)
+          if (fpclassify(cell) == FP_SUBNORMAL) {
+            ++i;
+          }
+        clog << "Found " << i
+             << " subnormal float-point numbers. This typically means some "
+                "errors.\n";
       }
       break;
     case 's':
@@ -632,64 +652,73 @@ d - Discard.
       }
       break;
     case 't':
-      if (!frames.empty() && selected_patch < patches.size()) {
+      if (!frames_empty && selected_patch < patches.size()) {
         float t = 0;
         cin >> t;
-        if (t < frames.front().time || t > frames.back().time)
+
+        auto &_data = frames.data.at(selected_patch);
+        auto &data = _data.data;
+        auto sz = _data.size;
+        if (t < frames.times.front() || t > frames.times.back())
           cerr << "Out of border. Terminated.\n";
         else
-          for (size_t i = 0; i < frames.size(); ++i)
-            if (t < frames[i].time) {
+          for (size_t i = 0; i < frames.times.size(); ++i)
+            if (t < frames.times[i]) {
               assert(i > 0);
-              auto last = frames[i - 1].data[selected_patch].data;
-              const auto &next = frames[i].data[selected_patch].data;
-              interlop(last, next, frames[i].time - t, t - frames[i - 1].time);
-              clog << "Time: " << frames[i - 1].time << ", " << frames[i].time
+              vector<float> last = {data.begin() + (i - 1) * sz,
+                                    data.begin() + i * sz};
+              const vector<float> next = {data.begin() + i * sz,
+                                          data.begin() + (i + 1) * sz};
+              interlop(last, next, frames.times[i] - t,
+                       t - frames.times[i - 1]);
+              clog << "Time: " << frames.times[i - 1] << ", " << frames.times[i]
                    << "\n";
               auto &patch = patches[selected_patch];
               data_and_size.push_back(
                   make_pair(std::move(last),
                             vector<u32>{patch.K(), patch.J(), patch.I()}));
               break;
-            } else if (t == frames[i].time) {
+            } else if (t == frames.times[i]) {
               auto &patch = patches[selected_patch];
-              clog << "Time: " << frames[i - 1].time << "\n";
+              clog << "Time: " << frames.times[i] << "\n";
               data_and_size.push_back(
-                  make_pair(frames[i].data[selected_patch].data,
+                  make_pair(vector<float>{data.begin() + i * sz,
+                                          data.begin() + (i + 1) * sz},
                             vector<u32>{patch.K(), patch.J(), patch.I()}));
               break;
             }
       }
       break;
     case 'f':
-      if (!frames.empty() && selected_patch < patches.size()) {
+      if (!frames_empty && selected_patch < patches.size()) {
         auto item = make_pair(vector<float>{}, vector<u32>{});
         auto &[data, sizes] = item;
         const auto &patch = patches[selected_patch];
         cout << "Frame index: ";
-        auto f = frames.size();
+        auto f = frames.times.size();
         cin >> f;
-        if (f >= frames.size()) {
+        if (f >= frames.times.size()) {
           cerr << "Frame index invalid." << endl;
           break;
         }
-        data = frames[f].data[selected_patch].data;
+        data.clear();
+        auto &_patch = frames.data.at(selected_patch);
+        auto &patch_data = _patch.data;
+        auto &patch_size = _patch.size;
+        data.insert(data.end(), patch_data.begin() + patch_size * f,
+                    patch_data.begin() + patch_size * (f + 1));
         sizes = {patch.K(), patch.J(), patch.I()};
         data_and_size.push_back(std::move(item));
       }
       break;
     case 'F':
-      if (!frames.empty() && selected_patch < patches.size()) {
+      if (!frames_empty && selected_patch < patches.size()) {
         auto item = make_pair(vector<float>{}, vector<u32>{});
         auto &[data, sizes] = item;
         const auto &patch = patches[selected_patch];
-        sizes = {(u32)frames.size(), patch.K(), patch.J(), patch.I()};
-        data.clear();
+        sizes = {(u32)frames.times.size(), patch.K(), patch.J(), patch.I()};
         data.reserve(array_stride(sizes, 0));
-        for (const auto &frame : frames) {
-          const auto &patch = frame.data[selected_patch];
-          data.insert(data.cend(), patch.data.cbegin(), patch.data.cend());
-        }
+        data = frames.data.at(selected_patch).data;
         data_and_size.push_back(std::move(item));
       }
       break;

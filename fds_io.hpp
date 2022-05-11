@@ -48,12 +48,15 @@ static inline vector<patch_info> read_patches(istream &fin) {
   return patches;
 }
 
-static inline vector<frame> read_frames(istream &fin,
-                                        const vector<patch_info> patches) {
-  vector<frame> frames;
+static inline fds_boundary_file read_frames(istream &fin,
+                                            const vector<patch_info> patches) {
+  fds_boundary_file frames;
+
+  auto &data_map = frames.data;
+  for (u32 i_patch = 0; i_patch < patches.size(); ++i_patch)
+    data_map.emplace(i_patch, patch_datas{patches[i_patch].size(), {}});
   while (fin.peek() != decay_t<decltype(fin)>::traits_type::eof() &&
          !fin.eof()) {
-    vector<patch_data> current(patches.size(), patch_data{});
     check(fin, integer_separator);
     float stime = read_float(fin);
     check(fin, integer_separator);
@@ -63,8 +66,8 @@ static inline vector<frame> read_frames(istream &fin,
       const auto &info = patches[ip];
       auto _size = info.size();
       CHECK_FORMAT(_size * sizeof(float) == patch_size);
-      auto &data = current[ip].data;
-      data.reserve(_size);
+      auto &data = data_map[ip].data;
+      data.reserve(data.size() + _size);
       for (size_t i = 0; i < info.size(); ++i) {
         float val = read_float(fin);
         data.push_back(val);
@@ -73,7 +76,7 @@ static inline vector<frame> read_frames(istream &fin,
       CHECK_FORMAT(patch_end == patch_size);
     }
 
-    frames.push_back(frame{stime, std::move(current)});
+    frames.times.push_back(stime);
   }
   return frames;
 }
@@ -93,7 +96,7 @@ read_file_header_and_patches(istream &fin) {
  * @return Label, Bar Label, Units, Patches, Frames
  */
 static inline tuple<array<char, 30 + 1>, array<char, 30 + 1>,
-                    array<char, 30 + 1>, vector<patch_info>, vector<frame>>
+                    array<char, 30 + 1>, vector<patch_info>, fds_boundary_file>
 read_file(istream &fin) {
   auto &&header = read_file_header(fin);
   auto &&patches = read_patches(fin);
@@ -145,10 +148,10 @@ static inline void print_patches(ostream &o, const vector<patch_info> patches) {
   }
 }
 
-static inline void print_frames(ostream &o, const vector<frame> frames) {
+static inline void print_frames(ostream &o, const fds_boundary_file frames) {
   size_t i = 0;
-  for (const auto &f : frames) {
-    o << "Frame " << i << " at " << f.time << "s." << endl;
+  for (const auto &f : frames.times) {
+    o << "Frame " << i << " at " << f << "s." << endl;
     ++i;
   }
 }

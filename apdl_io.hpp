@@ -189,11 +189,11 @@ static inline void write_table(
     ostream &o, const path &directory, const char *name, u32 element_number,
     u32 surface_number, vector<u32>::const_iterator surface_indices_begin,
     vector<u32>::const_iterator surface_indices_end,
-    const vector<frame> &frames, vector<float>::const_iterator vec_begin,
+    const fds_boundary_file &frames, vector<float>::const_iterator vec_begin,
     vector<float>::const_iterator vec_end) {
 
   static const path ext = path("txt");
-  assert(vec_begin + frames.size() == vec_end);
+  assert(vec_begin + frames.times.size() == vec_end);
 
   if (all_of(vec_begin, vec_end, [](float data) { return data == 0.0f; }))
     return;
@@ -206,9 +206,9 @@ static inline void write_table(
   assert(tout);
   tout << "TIME " << name << '\n';
 
-  for (const frame &frame : frames) {
+  for (const auto time : frames.times) {
     assert(vec_begin != vec_end);
-    tout << frame.time << ' ' << *vec_begin * 1000 << '\n';
+    tout << time << ' ' << *vec_begin * 1000 << '\n';
     ++vec_begin;
   }
   tout.close();
@@ -216,7 +216,7 @@ static inline void write_table(
 #pragma omp critical
   {
     o << "*DIM," << name << element_number << '_' << surface_number << ",TABLE,"
-      << frames.size() << ",1,1,TIME,\n";
+      << frames.times.size() << ",1,1,TIME,\n";
     o << "*TREAD," << name << element_number << '_' << surface_number << ','
       << element_number << '_' << surface_number << ",txt,"
       << absolute(directory).generic_string() << ",1\n";

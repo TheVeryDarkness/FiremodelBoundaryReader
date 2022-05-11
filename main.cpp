@@ -45,9 +45,9 @@ using std::filesystem::directory_iterator;
 using std::filesystem::is_regular_file;
 using std::filesystem::path;
 
-static inline void search_frame_by_time(const vector<frame> &frames) {
-  using std::cin;
-  using std::cout;
+static inline void search_frame_by_time(const fds_boundary_file &frames) {
+  auto &times = frames.times;
+
   constexpr auto help = R"(
 Choose search mode.
 > - Earliest frame later than given time.
@@ -61,18 +61,18 @@ d - Discard.
 
     char op4 = 'd';
     cin >> op4;
-    const auto time_search =
-        [&frames = frames](bool (*pred)(float, float, float), bool right) {
-          float t = NAN;
-          cin >> t;
-          for (size_t i = 1; i < frames.size(); ++i)
-            if (pred(frames[i - 1].time, t, frames[i].time)) {
-              cout << "Frame " << i << " at " << frames[right ? i : i - 1].time
-                   << "s." << endl;
-              return;
-            }
-          cout << "Not found." << endl;
-        };
+    const auto time_search = [&times](bool (*pred)(float, float, float),
+                                      bool right) {
+      float t = NAN;
+      cin >> t;
+      for (size_t i = 1; i < times.size(); ++i)
+        if (pred(times[i - 1], t, times[i])) {
+          cout << "Frame " << i << " at " << times[right ? i : i - 1] << "s."
+               << endl;
+          return;
+        }
+      cout << "Not found." << endl;
+    };
     switch (op4) {
     case '>': {
       time_search(
@@ -103,7 +103,8 @@ d - Discard.
   }
 }
 
-static inline void search_frame(const vector<frame> &frames) {
+static inline void search_frame(const fds_boundary_file &frames) {
+  auto &times = frames.times;
   while (true) {
     cout << R"(
 Select item to search by.
@@ -115,15 +116,15 @@ d - discard.
     cin >> op3;
     switch (op3) {
     case 'i': {
-      cout << "Input the index. There are " << frames.size()
+      cout << "Input the index. There are " << times.size()
            << " frames in total." << endl;
       u32 f = 0;
       cin >> f;
-      if (f >= frames.size()) {
+      if (f >= times.size()) {
         cerr << "Not a valid frame." << endl;
         break;
       }
-      cout << "Frame " << f << " is at " << frames[f].time << "s." << endl;
+      cout << "Frame " << f << " is at " << times[f] << "s." << endl;
     } break;
     case 't': {
       search_frame_by_time(frames);
@@ -247,7 +248,7 @@ q - quit
 }
 
 static inline tuple<array<char, 30 + 1>, array<char, 30 + 1>,
-                    array<char, 30 + 1>, vector<patch_info>, vector<frame>>
+                    array<char, 30 + 1>, vector<patch_info>, fds_boundary_file>
 read_file_with_mode(istream &fin) {
 
   cout << R"(
@@ -298,9 +299,14 @@ d - Discard.
 /// .bf file.
 static inline void process_file() {
   tuple<array<char, 30 + 1>, array<char, 30 + 1>, array<char, 30 + 1>,
-        vector<patch_info>, vector<frame>>
+        vector<patch_info>, fds_boundary_file>
       data;
   auto &[label, bar_label, units, patches, frames] = data;
+
+  const auto frames_empty = [&data]() {
+    auto &[label, bar_label, units, patches, frames] = data;
+    return frames.times.empty();
+  };
 
   tuple<vector<float>, vector<u32>, vector<u32>, vector<u32>, vector<u32>>
       elements_data;
@@ -329,7 +335,7 @@ u - Unload file.)";
       cout << R"(
 b - Show boundary quantity basic information.)";
 
-    if (!frames.empty())
+    if (!frames_empty())
       cout << R"(
 f - Show frames.
 F - Search for frame.)"
@@ -358,7 +364,7 @@ v - Visualize patches geometry.)"
       cout << R"(
 N - Visualize nodes and patches geometry.)";
 
-    if (!patches.empty() && !frames.empty())
+    if (!patches.empty() && !frames_empty())
       cout << R"(
 a - Analyze patch data.
 A - Attach patch data.)";
@@ -376,7 +382,8 @@ A - Attach patch data.)";
     case 'u': {
       label.front() = bar_label.front() = units.front() = '\0';
       patches.clear();
-      frames.clear();
+      frames.times.clear();
+      frames.data.clear();
     } break;
     case 'e': {
       elements_data = read_nodes_and_elements();
@@ -393,7 +400,8 @@ A - Attach patch data.)";
       if (!fin) {
         FILE_OPEN_FAILED;
       }
-      frames.clear();
+      frames.times.clear();
+      frames.data.clear();
       data = read_file_with_mode(fin);
     } break;
 #if GRAPHICS_ENABLED
@@ -428,7 +436,7 @@ A - Attach patch data.)";
       attach(patches, frames, elements_data);
     } break;
     case 'f': {
-      if (!frames.empty())
+      if (!frames_empty())
         print_frames(cout.original(), frames);
       else
         goto CMDNF;
@@ -443,7 +451,7 @@ A - Attach patch data.)";
 #endif // GRAPHICS_ENABLED
 #if GRAPHICS_ENABLED
     case 'V': {
-      if (!frames.empty()) {
+      if (!frames_empty()) {
         visualize_frames(patches, frames, get_data_category(units));
       } else
         goto CMDNF;
@@ -456,7 +464,7 @@ A - Attach patch data.)";
         goto CMDNF;
     } break;
     case 'F': {
-      if (!frames.empty())
+      if (!frames_empty())
         search_frame(frames);
       else
         goto CMDNF;

@@ -371,8 +371,8 @@ round_all(const vector<float> &I, const vector<float> &J,
 }
 
 [[nodiscard]] static inline vector<float>
-calculate_node(const vector<frame> &frames, const vector<patch_info> &patches,
-               u32 i, u32 j, u32 k) {
+calculate_node(const fds_boundary_file &frames,
+               const vector<patch_info> &patches, u32 i, u32 j, u32 k) {
   vector<float> res;
   for (size_t i_patch = 0; i_patch < patches.size(); ++i_patch) {
     auto &patch = patches[i_patch];
@@ -380,10 +380,13 @@ calculate_node(const vector<frame> &frames, const vector<patch_info> &patches,
     auto [J1, J2] = patch.border<1>();
     auto [K1, K2] = patch.border<2>();
     if (I1 <= i && i <= I2 && J1 <= j && j <= J2 && K1 <= k && k <= K2) {
-      for (auto &frame : frames)
-        res.push_back(
-            frame.data[i_patch].data[(i - I1) + patch.I() * (j - J1) +
-                                     patch.I() * patch.J() * (k - K1)]);
+      for (auto &[i_patch, data] : frames.data) {
+        auto sz = data.size;
+        for (u32 t = 0; t < frames.times.size(); ++t) {
+          res.push_back(data.data[t * sz + (i - I1) + patch.I() * (j - J1) +
+                                  patch.I() * patch.J() * (k - K1)]);
+        }
+      }
       return res;
     }
   }
@@ -393,26 +396,26 @@ calculate_node(const vector<frame> &frames, const vector<patch_info> &patches,
 
 template <size_t dim0, size_t dim1, size_t dim2>
 [[nodiscard]] static inline vector<float>
-find(const vector<frame> &frames, const vector<patch_info> &patches,
+find(const fds_boundary_file &frames, const vector<patch_info> &patches,
      const vector<float> &I, const vector<float> &J, const vector<float> &K) {
   assert(I.size() == J.size());
   vector<float> res;
-  for (const auto &frame : frames) {
+  for (size_t t = 0; t < frames.times.size(); ++t) {
     float sum = 0;
     for (size_t index = 0; index < I.size(); ++index) {
       u32 i = lroundf(I[index]);
       u32 j = lroundf(J[index]);
       u32 k = lroundf(K[index]);
-      for (size_t i_patch = 0; i_patch < patches.size(); ++i_patch) {
+      // for (size_t i_patch = 0; i_patch < patches.size(); ++i_patch)
+      for (auto &[i_patch, data] : frames.data) {
         auto &patch = patches[i_patch];
+        auto sz = data.size;
         auto [I1, I2] = patch.border<dim1>();
         auto [J1, J2] = patch.border<dim2>();
         auto [K1, K2] = patch.border<dim0>();
         assert(K1 == K1);
         if (k == K1 && I1 <= i && i <= I2 && J1 <= j && j <= J2) {
-          for (auto &frame : frames)
-            sum += frame.data[i_patch]
-                       .data[(i - I1) + patch.length<dim1>() * (j - J1)];
+          sum += data.data[t * sz + (i - I1) + patch.length<dim1>() * (j - J1)];
           goto NEXT;
         }
       }
@@ -444,7 +447,7 @@ polygon_average(const vector<patch_info> &patches, const vector<float> &nodes,
                 const vector<u8> &polygon_surface_numbers,
                 const vector<u32> &on_boundary_polygon_sizes,
                 const vector<u32> &on_boundary_polygon_indices,
-                const vector<frame> &frames) {
+                const fds_boundary_file &frames) {
   assert(nodes.size() % 3 == 0);
   assert(!nodes.empty());
   assert(!patches.empty());
@@ -489,7 +492,7 @@ polygon_average(const vector<patch_info> &patches, const vector<float> &nodes,
     auto k2 = *_k2;
 
     sum.clear();
-    sum.resize(frames.size(), 0.f);
+    sum.resize(frames.times.size(), 0.f);
 
     for (size_t index = 0; index < I.size(); ++index) {
       auto _i = I[index];
@@ -497,10 +500,11 @@ polygon_average(const vector<patch_info> &patches, const vector<float> &nodes,
       auto _k = K[index];
       auto n = calculate_node(frames, patches, lroundf(_i), lroundf(_j),
                               lroundf(_k));
-      for (size_t t = 0; t < frames.size(); ++t)
+      assert(n.size() == frames.times.size());
+      for (size_t t = 0; t < frames.times.size(); ++t)
         sum[t] += n[t];
     }
-    for (size_t t = 0; t < frames.size(); ++t)
+    for (size_t t = 0; t < frames.times.size(); ++t)
       sum[t] /= I.size();
 
     numbers.push_back(*P);

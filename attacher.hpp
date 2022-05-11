@@ -61,11 +61,13 @@ static inline void select_patches() {
 }
 
 static inline void attach(const vector<patch_info> &patches,
-                          const vector<frame> &frames,
+                          const fds_boundary_file &frames,
                           const tuple<vector<float>, vector<u32>, vector<u32>,
                                       vector<u32>, vector<u32>> &element_data) {
   auto &[nodes, element_sizes, element_indices, node_numbers, element_numbers] =
       element_data;
+
+  const auto frames_empty = frames.times.empty();
 
   auto elem_avail = [&]() {
     auto &[nodes, element_sizes, element_indices, node_numbers,
@@ -189,7 +191,7 @@ N - Visualize nodes on boundary.
 R - Visualize elements primitives on boundary.)";
 #endif // GRAPHICS_ENABLED
 
-    if (!patches.empty() && !frames.empty() && elem_avail())
+    if (!patches.empty() && !frames_empty && elem_avail())
       cout << R"(
 l - Write APDL output.
 A - Review output by visualizing them.)";
@@ -285,8 +287,8 @@ d - Discard.
           cerr << "No surfaces on boundary found\n";
           break;
         }
-        assert(frames.size() <= numeric_limits<u32>::max());
-        visualize_nodes(centroid, boundary_data, (u32)frames.size());
+        assert(frames.times.size() <= numeric_limits<u32>::max());
+        visualize_nodes(centroid, boundary_data, (u32)frames.times.size());
       }
       break;
     case 'M':
@@ -296,7 +298,7 @@ d - Discard.
       break;
 #endif // GRAPHICS_ENABLED
     case 'l':
-      if (!patches.empty() && !frames.empty() && elem_avail()) {
+      if (!patches.empty() && !frames_empty && elem_avail()) {
         auto opt1 = request_file_by_name([](const path &p) { return true; },
                                          "APDL output");
         auto opt2 = request_file_by_name([](const path &p) { return true; },
@@ -318,7 +320,7 @@ d - Discard.
         }
         out << "/PREP7" << endl;
 
-        const auto N = frames.size();
+        const auto N = frames.times.size();
 
         auto &[on_boundary_vertex_sizes, on_boundary_vertex_indices,
                node_numbers, element_numbers, surface_numbers] =

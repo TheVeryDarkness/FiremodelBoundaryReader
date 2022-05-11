@@ -123,12 +123,15 @@ struct patch_info {
 
   u32 size() const noexcept { return I() * J() * K(); }
 };
-struct patch_data {
-  vector<float> data;
+// Data of a single patch
+struct patch_datas {
+  u32 size;
+  vector<float> data; // FramesCount * K * J * I
 };
-struct frame {
-  float time;
-  vector<patch_data> data;
+// Data in boundary quantity file
+struct fds_boundary_file {
+  map<u32, patch_datas> data;
+  vector<float> times;
 };
 
 enum class data_category { temperature, other };
@@ -141,7 +144,7 @@ constexpr static inline bool compare(const array<char, 30 + 1> &a,
                                  b + len + 1) == 0;
 }
 
-static inline size_t selected_patch = 0;
+static inline u32 selected_patch = 0;
 static inline vector<u16> selected_patches = {};
 
 constexpr static inline data_category
@@ -285,30 +288,35 @@ static inline vector<u16> from_patches_selection(const vector<u16> &selection) {
   return res;
 }
 
-static inline vector<float> from_frame(const frame &frame, u32 size) {
+static inline vector<float> from_frame(const fds_boundary_file &frames,
+                                       u32 frame_index, u32 reserve_size) {
   vector<float> res;
-  res.reserve(size);
+  res.reserve(reserve_size);
 
-  for (auto &p : frame.data)
-    res.insert(res.cend(), p.data.cbegin(), p.data.cend());
+  for (auto &[patch_index, p] : frames.data) {
+    auto size = p.size;
+    res.insert(res.cend(), p.data.cbegin() + frame_index * size,
+               p.data.cbegin() + (frame_index + 1) * size);
+  }
   return res;
 }
 
 static inline tuple<tuple<vector<u32>, vector<float>>, vector<u32>>
-from_data(const vector<patch_info> &patches, const frame &frame) {
+from_data(const vector<patch_info> &patches, const fds_boundary_file &frames,
+          u32 frame_index) {
   tuple<tuple<vector<u32>, vector<float>>, vector<u32>> res;
   auto &[vertices, indices] = res;
   auto &[position, _data] = vertices;
 
   u32 points = 0;
-  for (auto &p : patches) {
-    points += p.size();
+  for (auto &[i, p] : frames.data) {
+    points += p.size;
   }
 
   position.reserve(points * 3);
   indices.reserve(points);
 
-  _data = from_frame(frame, points);
+  _data = from_frame(frames, frame_index, points);
 
   for (const auto &patch : patches) {
     for (auto k = patch.K1; k <= patch.K2; ++k) {
@@ -990,11 +998,29 @@ from_patches(const regions &rgs, bool wireframe) {
   return res;
 }
 
-static inline tuple<float, float> frame_minmax(const frame &frame) {
-  float _min = frame.data.front().data.front();
-  float _max = frame.data.front().data.front();
-  for (auto &patch_frame : frame.data) {
+static inline tuple<float, float> frame_minmax(const fds_boundary_file &frame,
+                                               u32 frame_index) {
+  float _min = numeric_limits<float>::max();
+  float _max = numeric_limits<float>::min();
+  for (auto &[i_patch, patch_frame] : frame.data) {
     auto &data = patch_frame.data;
+    auto size = patch_frame.size;
+    auto [__min, __max] =
+        minmax_element(data.begin() + frame_index * size,
+                       data.begin() + (frame_index + 1) * size);
+    _min = min(_min, *__min);
+    _max = max(_max, *__max);
+  }
+  return {_min, _max};
+}
+
+static inline tuple<float, float>
+frames_minmax(const fds_boundary_file &frame) {
+  float _min = frame.data.begin()->second.data.front();
+  float _max = frame.data.begin()->second.data.front();
+  for (auto &[i_patch, patch_frame] : frame.data) {
+    auto &data = patch_frame.data;
+    auto size = patch_frame.size;
     auto [__min, __max] = minmax_element(data.begin(), data.end());
     _min = min(_min, *__min);
     _max = max(_max, *__max);
