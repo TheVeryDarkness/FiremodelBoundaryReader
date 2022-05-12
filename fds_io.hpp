@@ -2,6 +2,9 @@
 
 #include "fds_basic.hpp"
 #include "io.hpp"
+#include "proxy.hpp"
+
+using std::ws;
 
 static inline tuple<array<char, 30 + 1>, array<char, 30 + 1>,
                     array<char, 30 + 1>>
@@ -81,6 +84,47 @@ static inline fds_boundary_file read_frames(istream &fin,
   return frames;
 }
 
+static inline fds_boundary_file
+read_frames_of_specified_patches(istream &fin, const vector<patch_info> patches,
+                                 const vector<u32> &patch_indices) {
+  fds_boundary_file frames;
+
+  auto &data_map = frames.data;
+  for (u32 i_patch : patch_indices) {
+    assert(i_patch < patches.size());
+    data_map.emplace(i_patch, patch_datas{patches[i_patch].size(), {}});
+  }
+  // for (u32 i_patch = 0; i_patch < patches.size(); ++i_patch)
+  while (fin.peek() != decay_t<decltype(fin)>::traits_type::eof() &&
+         !fin.eof()) {
+    check(fin, integer_separator);
+    float stime = read_float(fin);
+    check(fin, integer_separator);
+
+    for (size_t ip = 0; ip < patches.size(); ++ip) {
+      u32 patch_size = read_uint32(fin);
+      const auto &info = patches[ip];
+      auto _size = info.size();
+      CHECK_FORMAT(_size * sizeof(float) == patch_size);
+      if (data_map.find(ip) != data_map.cend()) {
+        auto &data = data_map[ip].data;
+        data.reserve(data.size() + patch_size);
+        for (size_t i = 0; i < info.size(); ++i) {
+          float val = read_float(fin);
+          data.push_back(val);
+        }
+      } else {
+        fin.ignore(patch_size);
+      }
+      u32 patch_end = read_uint32(fin);
+      CHECK_FORMAT(patch_end == patch_size);
+    }
+
+    frames.times.push_back(stime);
+  }
+  return frames;
+}
+
 /*
  * @return Label, Bar Label, Units, Patches
  */
@@ -101,6 +145,26 @@ read_file(istream &fin) {
   auto &&header = read_file_header(fin);
   auto &&patches = read_patches(fin);
   auto &&frames = read_frames(fin, patches);
+  return std::tuple_cat(std::move(header),
+                        std::make_tuple(std::move(patches), std::move(frames)));
+}
+
+/*
+ * @return Label, Bar Label, Units, Patches, Frames
+ */
+static inline tuple<array<char, 30 + 1>, array<char, 30 + 1>,
+                    array<char, 30 + 1>, vector<patch_info>, fds_boundary_file>
+read_file_of_specified_patches(istream &fin) {
+  auto &&header = read_file_header(fin);
+  auto &&patches = read_patches(fin);
+
+  vector<u32> indices = read_until<u32>(cin);
+
+  for (auto index : indices)
+    if (index >= patches.size())
+      clog << index << " is out of bound.\n";
+
+  auto &&frames = read_frames_of_specified_patches(fin, patches, indices);
   return std::tuple_cat(std::move(header),
                         std::make_tuple(std::move(patches), std::move(frames)));
 }

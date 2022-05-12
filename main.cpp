@@ -39,6 +39,7 @@ using std::ios;
 using std::optional;
 using std::setprecision;
 using std::string;
+using std::ws;
 using std::filesystem::current_path;
 using std::filesystem::directory_entry;
 using std::filesystem::directory_iterator;
@@ -59,8 +60,8 @@ d - Discard.
   while (true) {
     cout << help;
 
-    char op4 = 'd';
-    cin >> op4;
+    char opt = 'd';
+    cin >> opt;
     const auto time_search = [&times](bool (*pred)(float, float, float),
                                       bool right) {
       float t = NAN;
@@ -73,7 +74,7 @@ d - Discard.
         }
       cout << "Not found." << endl;
     };
-    switch (op4) {
+    switch (opt) {
     case '>': {
       time_search(
           [](float prev, float t, float cur) { return prev <= t && t < cur; },
@@ -112,9 +113,9 @@ i - Index.
 t - Time.
 d - discard.
 )";
-    char op3 = 'd';
-    cin >> op3;
-    switch (op3) {
+    char opt = 'd';
+    cin >> opt;
+    switch (opt) {
     case 'i': {
       cout << "Input the index. There are " << times.size()
            << " frames in total." << endl;
@@ -145,9 +146,9 @@ Select item to search by.
 i - Index.
 d - discard.
 )";
-    char op3 = 'd';
-    cin >> op3;
-    switch (op3) {
+    char opt = 'd';
+    cin >> opt;
+    switch (opt) {
     case 'i': {
       cout << "Input the index. There are " << patches.size()
            << " patches in total." << endl;
@@ -188,9 +189,9 @@ q - quit
     auto di = directory_iterator(cp);
 
     cout << endl << cp.string() << "> ";
-    char opt0 = 'q';
-    cin >> opt0;
-    switch (opt0) {
+    char opt = 'q';
+    cin >> opt;
+    switch (opt) {
     case 'd': {
       auto dir = request_file_by_id(
           di, [](const directory_entry &entry) { return entry.is_directory(); },
@@ -257,9 +258,9 @@ p - Header and patches.
 f - Header, patches and all frames.
 d - Discard.
 )";
-  char c = 'd';
-  cin >> c;
-  switch (c) {
+  char opt = 'd';
+  cin >> opt;
+  switch (opt) {
   case 'h': {
     cout << "Reading started." << endl;
     auto &&[label, bar_label, units] = read_file_header(fin);
@@ -280,6 +281,14 @@ d - Discard.
     cout << "Reading started." << endl;
     auto [label, bar_label, units, patches, frames] = read_file(fin);
     cout << "Reading finished." << endl;
+    return {std::move(label), std::move(bar_label), std::move(units),
+            std::move(patches), std::move(frames)};
+  } break;
+  case 'F': {
+    cout << "Reading started.\n";
+    auto [label, bar_label, units, patches, frames] =
+        read_file_of_specified_patches(fin);
+    cout << "Reading finished.\n";
     return {std::move(label), std::move(bar_label), std::move(units),
             std::move(patches), std::move(frames)};
   } break;
@@ -374,9 +383,9 @@ A - Attach patch data.)";
   help();
   while (true) {
     cout << "Please input your command here: ";
-    char op1 = 'q';
-    cin >> op1;
-    switch (op1) {
+    char opt = 'q';
+    cin >> opt;
+    switch (opt) {
     case 'q':
       return;
     case 'u': {

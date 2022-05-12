@@ -426,7 +426,8 @@ d - Discard.
             cell = val;
             ++i;
           }
-        clog << "Replaced " << i << " nan with " << val;
+        if (i > 0)
+          clog << "Replaced " << i << " nan with " << val << '\n';
       }
       break;
     case 'N':
@@ -439,7 +440,8 @@ d - Discard.
             cell = val;
             ++i;
           }
-        clog << "Replaced " << i << " inf with " << val;
+        if (i > 0)
+          clog << "Replaced " << i << " inf with " << val << '\n';
       }
       break;
     case 'z':
@@ -516,20 +518,19 @@ d - Discard.
         auto &[data, sizes] = data_and_size.back();
         size_t dimension = -1;
         cin >> dimension;
-        if (dimension >= sizes.size() || sizes.size() == 1) {
+        if (dimension >= sizes.size()) {
           cerr << "Dimension invalid." << endl;
           break;
         }
         const auto sz = sizes[dimension];
         cout << "Size of this dimension: " << sz << endl;
-        vector<u32> pos;
-        while (true) {
-          u32 i = -1;
-          cin >> i;
-          if (i >= sz)
+        cout << "'\\' to stop\n";
+        vector<u32> pos = read_until<u32>(cin);
+        for (auto p : pos)
+          if (p >= sz) {
+            cerr << "Out of border.\n";
             break;
-          pos.push_back(i);
-        }
+          }
 
         data = sample(data, sizes, dimension, pos);
         sizes[dimension] = (u32)pos.size();

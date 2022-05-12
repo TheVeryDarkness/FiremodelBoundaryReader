@@ -305,7 +305,7 @@ a - ANSYS mapdl file.
             move(element_numbers)};
   }
   default:
-    COMMAND_NOT_FOUND;
+    COMMAND_NOT_FOUND_OPT(opt0);
   case 'd':
     return {};
   }

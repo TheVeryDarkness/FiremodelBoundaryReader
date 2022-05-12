@@ -1,15 +1,20 @@
 #pragma once
+#include <iomanip>
 #include <iostream>
 #include <sstream>
+#include <vector>
 
 using std::cerr;
 using std::clog;
 using std::enable_if_t;
 using std::is_function_v;
+using std::istream;
 using std::ostream;
 using std::string;
+using std::vector;
 
-#define COMMAND_NOT_FOUND cerr << "Command not found.\n"
+#define COMMAND_NOT_FOUND_OPT(opt) cerr << "Option '" << opt << "' not found.\n"
+#define COMMAND_NOT_FOUND cerr << "Option '" << opt << "' not found.\n"
 #define FILE_OPEN_FAILED cerr << "File open failed.\n"
 #define DIRECTORY_CREATE_FAILED cerr << "Directory create failed.\n"
 
@@ -35,6 +40,15 @@ public:
     return *this;
   }
   void endl() { sin << std::endl; }
+  void ws() {
+    sin >> std::ws;
+    if (string_empty())
+      std::cin >> std::ws;
+  }
+  auto peek() { return string_empty() ? std::cin.peek() : sin.peek(); }
+  auto &ignore() { return string_empty() ? std::cin.ignore() : sin.ignore(); }
+
+  operator bool() { return !string_empty() || std::cin; }
 
   template <typename Any> stdin_proxy &operator<<(Any &&any) {
     sin.clear();
@@ -81,3 +95,19 @@ public:
   ostream &original() { return std::cout; }
 
 } cout;
+
+template <typename Ty>
+static inline vector<Ty> read_until(stdin_proxy &in, char delim = '\\') {
+  vector<Ty> res;
+  while (in) {
+    in.ws();
+    if (in.peek() == delim) {
+      in.ignore();
+      break;
+    } else {
+      res.push_back({});
+      in >> res.back();
+    }
+  }
+  return res;
+}
