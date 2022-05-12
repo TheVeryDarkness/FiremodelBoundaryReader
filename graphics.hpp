@@ -112,7 +112,7 @@ static inline double firstFrame = 0.0;
 static inline bool cursor_enabled = false;
 static inline bool index_loop = false;
 static inline u32 &current = selected_patch;
-static inline size_t max_index() { return selected_patches.size(); };
+static inline u32 max_index() { return selected_patches.size(); };
 static inline void set_max_index(size_t m) { selected_patches.resize(m); };
 static inline float key_move_sensity = 4.f;
 
@@ -994,7 +994,7 @@ static inline int visualize_frames(const vector<patch_info> &patches,
           return from_data(patches, frames, 0);
         },
         [&frames]() -> vector<float> {
-          auto i = current % frames.times.size();
+          u32 i = current % frames.times.size();
           return from_frame(frames, i, 0);
         },
         [&patches]() constexpr->tuple<float, float> {

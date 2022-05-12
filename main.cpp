@@ -442,7 +442,7 @@ A - Attach patch data.)";
       analyze(patches, frames);
     } break;
     case 'A': {
-      attach(patches, frames, elements_data);
+      attach(patches, frames, elements_data, get_data_category(units));
     } break;
     case 'f': {
       if (!frames_empty())

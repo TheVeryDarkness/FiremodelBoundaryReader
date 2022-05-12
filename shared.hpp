@@ -527,3 +527,16 @@ polygon_average(const vector<patch_info> &patches, const vector<float> &nodes,
             "point.\n";
   return res;
 }
+
+static inline pair<const char *, float>
+map_quantity_type(data_category category) {
+  switch (category) {
+  case data_category::temperature:
+    return {"TEMP", 1};
+  case data_category::heat_flux:
+    return {"HFLUX", 1000};
+  case data_category::other:
+  default:
+    throw exception();
+  }
+}

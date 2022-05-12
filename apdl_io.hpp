@@ -185,12 +185,14 @@ read_mapdl(istream &in) {
   return res;
 }
 
-static inline void write_table(
-    ostream &o, const path &directory, const char *name, u32 element_number,
-    u32 surface_number, vector<u32>::const_iterator surface_indices_begin,
-    vector<u32>::const_iterator surface_indices_end,
-    const fds_boundary_file &frames, vector<float>::const_iterator vec_begin,
-    vector<float>::const_iterator vec_end) {
+static inline void
+write_table(ostream &o, const path &directory, const char *name, float ratio,
+            u32 element_number, u32 surface_number,
+            vector<u32>::const_iterator surface_indices_begin,
+            vector<u32>::const_iterator surface_indices_end,
+            const fds_boundary_file &frames,
+            vector<float>::const_iterator vec_begin,
+            vector<float>::const_iterator vec_end) {
 
   static const path ext = path("txt");
   assert(vec_begin + frames.times.size() == vec_end);
@@ -208,12 +210,12 @@ static inline void write_table(
 
   for (const auto time : frames.times) {
     assert(vec_begin != vec_end);
-    tout << time << ' ' << *vec_begin * 1000 << '\n';
+    tout << time << ' ' << *vec_begin * ratio << '\n';
     ++vec_begin;
   }
   tout.close();
 
-#pragma omp critical
+  //#pragma omp critical
   {
     o << "*DIM," << name << element_number << '_' << surface_number << ",TABLE,"
       << frames.times.size() << ",1,1,TIME,\n";

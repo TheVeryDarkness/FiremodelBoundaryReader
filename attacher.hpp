@@ -63,7 +63,8 @@ static inline void select_patches() {
 static inline void attach(const vector<patch_info> &patches,
                           const fds_boundary_file &frames,
                           const tuple<vector<float>, vector<u32>, vector<u32>,
-                                      vector<u32>, vector<u32>> &element_data) {
+                                      vector<u32>, vector<u32>> &element_data,
+                          data_category dc) {
   auto &[nodes, element_sizes, element_indices, node_numbers, element_numbers] =
       element_data;
 
@@ -355,10 +356,12 @@ d - Discard.
           assert(P == E);
         }
 
+        auto [name, ratio] = map_quantity_type(dc);
+
         assert(element_numbers.size() == on_boundary_surface_numbers.size());
-#pragma omp parallel for schedule(dynamic, 5000)
+        //#pragma omp parallel for schedule(dynamic, 5000)
         for (long i = 0; i < on_boundary_vertex_sizes.size(); ++i) {
-          write_table(out, opt2.value(), "HFLUX", element_numbers[i],
+          write_table(out, opt2.value(), name, ratio, element_numbers[i],
                       on_boundary_surface_numbers[i], ps[i], ps[i + 1], frames,
                       Ps[i], Ps[i + 1]);
         }

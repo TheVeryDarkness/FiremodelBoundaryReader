@@ -134,7 +134,7 @@ struct fds_boundary_file {
   vector<float> times;
 };
 
-enum class data_category { temperature, other };
+enum class data_category { temperature, heat_flux, other };
 
 template <size_t len>
 constexpr static inline bool compare(const array<char, 30 + 1> &a,
@@ -151,7 +151,9 @@ constexpr static inline data_category
 get_data_category(const array<char, 30 + 1> &units) {
   if (compare(units, "C")) {
     return data_category::temperature;
-  } else
+  } else if (compare(units, "kW/m2"))
+    return data_category::heat_flux;
+  else
     return data_category::other;
 }
 

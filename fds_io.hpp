@@ -64,7 +64,7 @@ static inline fds_boundary_file read_frames(istream &fin,
     float stime = read_float(fin);
     check(fin, integer_separator);
 
-    for (size_t ip = 0; ip < patches.size(); ++ip) {
+    for (u32 ip = 0; ip < patches.size(); ++ip) {
       u32 patch_size = read_uint32(fin);
       const auto &info = patches[ip];
       auto _size = info.size();
@@ -98,18 +98,18 @@ read_frames_of_specified_patches(istream &fin, const vector<patch_info> patches,
   while (fin.peek() != decay_t<decltype(fin)>::traits_type::eof() &&
          !fin.eof()) {
     check(fin, integer_separator);
-    float stime = read_float(fin);
+    const float stime = read_float(fin);
     check(fin, integer_separator);
 
-    for (size_t ip = 0; ip < patches.size(); ++ip) {
+    for (u32 ip = 0; ip < patches.size(); ++ip) {
       u32 patch_size = read_uint32(fin);
       const auto &info = patches[ip];
-      auto _size = info.size();
+      const auto _size = info.size();
       CHECK_FORMAT(_size * sizeof(float) == patch_size);
       if (data_map.find(ip) != data_map.cend()) {
         auto &data = data_map[ip].data;
         data.reserve(data.size() + patch_size);
-        for (size_t i = 0; i < info.size(); ++i) {
+        for (size_t i = 0; i < _size; ++i) {
           float val = read_float(fin);
           data.push_back(val);
         }

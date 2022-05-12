@@ -35,6 +35,7 @@ public:
       std::cin >> std::forward<Any>(any);
     } else {
       sin >> std::forward<Any>(any);
+      sin >> std::ws;
     }
     mode = !string_empty();
     return *this;
@@ -61,6 +62,7 @@ public:
       std::getline(std::cin, s);
     else {
       std::getline(in.sin, s);
+      in.sin >> std::ws;
     }
     in.mode = !in.string_empty();
     return in;
@@ -68,8 +70,10 @@ public:
   friend stdin_proxy &getline(stdin_proxy &in, string &s, char delim) {
     if (in.string_empty())
       std::getline(std::cin, s, delim);
-    else
+    else {
       std::getline(in.sin, s, delim);
+      in.sin >> std::ws;
+    }
     return in;
   }
   bool get_mode() { return mode; }

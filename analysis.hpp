@@ -487,15 +487,19 @@ d - Discard.
       break;
     case 'm':
       if (!data_and_size.empty()) {
-        auto &[data, sizes] = data_and_size.back();
-        if (sizes.empty())
-          break;
         auto &out = cout.original();
-        auto begin = sizes.cbegin(), end = sizes.cend();
-        out << *begin;
-        ++begin;
-        for (; begin != end; ++begin)
-          out << '*' << *begin;
+        for (auto &[data, sizes] : data_and_size) {
+          if (sizes.empty()) {
+            out << "[]\n";
+            continue;
+          }
+          auto begin = sizes.cbegin(), end = sizes.cend();
+          out << *begin;
+          ++begin;
+          for (; begin != end; ++begin)
+            out << '*' << *begin;
+          out << '\n';
+        }
       }
       break;
     case 'p':
@@ -529,11 +533,12 @@ d - Discard.
         for (auto p : pos)
           if (p >= sz) {
             cerr << "Out of border.\n";
-            break;
+            goto SKIP;
           }
 
         data = sample(data, sizes, dimension, pos);
         sizes[dimension] = (u32)pos.size();
+      SKIP:;
       }
       break;
 #if GRAPHICS_ENABLED
@@ -649,6 +654,9 @@ d - Discard.
           cin >> a >> b;
           if (b != 0.0f)
             interlop(data_and_size.back().first, latter.first, a, b);
+          data_and_size.pop_back();
+        } else {
+          cerr << "Size not matched.\n";
         }
       }
       break;
