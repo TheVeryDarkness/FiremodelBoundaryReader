@@ -112,8 +112,8 @@ static inline double firstFrame = 0.0;
 static inline bool cursor_enabled = false;
 static inline bool index_loop = false;
 static inline u32 &current = selected_patch;
-static inline u32 max_index() { return selected_patches.size(); };
-static inline void set_max_index(size_t m) { selected_patches.resize(m); };
+static inline u32 max_index() { return unselected_patches.size(); };
+static inline void set_max_index(size_t m) { unselected_patches.resize(m); };
 static inline float key_move_sensity = 4.f;
 
 static inline bool keyX[2] = {};
@@ -197,7 +197,7 @@ static inline void onKey(GLFWwindow *window, const int key, int scancode,
 
   if (key == GLFW_KEY_SPACE)
     if (action == GLFW_PRESS)
-      selected_patches[current] = !selected_patches[current];
+      unselected_patches[current] = !unselected_patches[current];
 
   string title = std::to_string(current);
   glfwSetWindowTitle(window, title.c_str());
@@ -921,10 +921,10 @@ static inline int visualize_patch_selection(const vector<patch_info> &patches) {
           auto [p, i] = from_patches<true>(patches, wireframe);
           return make_tuple(
               tuple_cat(std::move(p),
-                        make_tuple(from_patches_selection(selected_patches))),
+                        make_tuple(from_patches_selection(unselected_patches))),
               std::move(i));
         },
-        []() -> auto{ return from_patches_selection(selected_patches); },
+        []() -> auto{ return from_patches_selection(unselected_patches); },
         [&patches]() -> tuple<float, float> {
           return {defaultNear, patch_far(patches)};
         },

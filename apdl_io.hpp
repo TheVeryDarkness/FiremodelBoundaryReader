@@ -215,7 +215,7 @@ write_table(ostream &o, const path &directory, const char *name, float ratio,
   }
   tout.close();
 
-  //#pragma omp critical
+#pragma omp critical
   {
     o << "*DIM," << name << element_number << '_' << surface_number << ",TABLE,"
       << frames.times.size() << ",1,1,TIME,\n";

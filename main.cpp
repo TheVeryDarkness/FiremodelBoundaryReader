@@ -172,7 +172,7 @@ d - discard.
 /*
  * @retval File stream that reads the corresponding file.
  */
-static inline optional<ifstream> select_file() {
+static inline optional<path> select_file() {
   constexpr auto help = R"(
 Choose what to do next.
 h - Show this help list.
@@ -184,6 +184,7 @@ p - Change current directory to parent directory if there is one.
 q - quit
 )";
   cout << help;
+  using std::filesystem::file_size;
   while (true) {
     auto cp = current_path();
     auto di = directory_iterator(cp);
@@ -208,11 +209,7 @@ q - quit
           ".bf file");
 
       if (bf.has_value()) {
-        auto entry = bf.value();
-        auto fin = ifstream(entry.path(), ios::binary);
-        if (fin.is_open())
-          return fin;
-        FILE_OPEN_FAILED;
+        return bf.value();
       }
     } break;
     case 'c': {
@@ -226,11 +223,7 @@ q - quit
           [](const path &p) { return is_regular_file(p); }, "readable");
 
       if (opt.has_value()) {
-        auto f = opt.value();
-        auto fin = ifstream(f, ios::binary);
-        if (fin.is_open())
-          return fin;
-        FILE_OPEN_FAILED;
+        return opt.value();
       }
     } break;
     case 'p': {
@@ -248,9 +241,18 @@ q - quit
   }
 }
 
+static inline optional<pair<ifstream, u32>> open_boundary_file(const path &p) {
+  using std::filesystem::file_size;
+  auto fin = ifstream(p, ios::binary);
+  if (fin.is_open())
+    return pair<ifstream, u32>{std::move(fin), (u32)file_size(p)};
+  FILE_OPEN_FAILED;
+  return {};
+}
+
 static inline tuple<array<char, 30 + 1>, array<char, 30 + 1>,
                     array<char, 30 + 1>, vector<patch_info>, fds_boundary_file>
-read_file_with_mode(istream &fin) {
+read_file_with_mode(istream &fin, u32 file_size) {
 
   cout << R"(
 h - Header only.
@@ -279,7 +281,7 @@ d - Discard.
   } break;
   case 'f': {
     cout << "Reading started." << endl;
-    auto [label, bar_label, units, patches, frames] = read_file(fin);
+    auto [label, bar_label, units, patches, frames] = read_file(fin, file_size);
     cout << "Reading finished." << endl;
     return {std::move(label), std::move(bar_label), std::move(units),
             std::move(patches), std::move(frames)};
@@ -287,7 +289,7 @@ d - Discard.
   case 'F': {
     cout << "Reading started.\n";
     auto [label, bar_label, units, patches, frames] =
-        read_file_of_specified_patches(fin);
+        read_file_of_specified_patches(fin, file_size);
     cout << "Reading finished.\n";
     return {std::move(label), std::move(bar_label), std::move(units),
             std::move(patches), std::move(frames)};
@@ -404,14 +406,17 @@ A - Attach patch data.)";
       auto in = select_file();
       if (!in.has_value())
         break;
-      auto &fin = in.value();
+      auto opt = open_boundary_file(in.value());
+      if (!opt.has_value())
+        break;
+      auto &&[fin, sz] = std::move(opt.value());
       fin.peek();
       if (!fin) {
         FILE_OPEN_FAILED;
       }
       frames.times.clear();
       frames.data.clear();
-      data = read_file_with_mode(fin);
+      data = read_file_with_mode(fin, sz);
     } break;
 #if GRAPHICS_ENABLED
     case 'N':

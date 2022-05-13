@@ -374,18 +374,17 @@ round_all(const vector<float> &I, const vector<float> &J,
 calculate_node(const fds_boundary_file &frames,
                const vector<patch_info> &patches, u32 i, u32 j, u32 k) {
   vector<float> res;
-  for (size_t i_patch = 0; i_patch < patches.size(); ++i_patch) {
+  for (auto &[i_patch, data] : frames.data) {
     auto &patch = patches[i_patch];
-    auto [I1, I2] = patch.border<0>();
-    auto [J1, J2] = patch.border<1>();
-    auto [K1, K2] = patch.border<2>();
+    const auto [I1, I2] = patch.border<0>();
+    const auto [J1, J2] = patch.border<1>();
+    const auto [K1, K2] = patch.border<2>();
     if (I1 <= i && i <= I2 && J1 <= j && j <= J2 && K1 <= k && k <= K2) {
-      for (auto &[i_patch, data] : frames.data) {
-        auto sz = data.size;
-        for (u32 t = 0; t < frames.times.size(); ++t) {
-          res.push_back(data.data[t * sz + (i - I1) + patch.I() * (j - J1) +
-                                  patch.I() * patch.J() * (k - K1)]);
-        }
+      const auto position_offset =
+          (i - I1) + patch.I() * (j - J1) + patch.I() * patch.J() * (k - K1);
+      const auto sz = data.size;
+      for (u32 t = 0; t < frames.times.size(); ++t) {
+        res.push_back(data.data[t * sz + position_offset]);
       }
       return res;
     }

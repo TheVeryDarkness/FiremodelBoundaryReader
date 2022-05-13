@@ -51,13 +51,16 @@ static inline vector<patch_info> read_patches(istream &fin) {
   return patches;
 }
 
-static inline fds_boundary_file read_frames(istream &fin,
-                                            const vector<patch_info> patches) {
+static inline fds_boundary_file
+read_frames(istream &fin, const vector<patch_info> patches, u32 frames_count) {
   fds_boundary_file frames;
 
   auto &data_map = frames.data;
-  for (u32 i_patch = 0; i_patch < patches.size(); ++i_patch)
-    data_map.emplace(i_patch, patch_datas{patches[i_patch].size(), {}});
+  for (u32 i_patch = 0; i_patch < patches.size(); ++i_patch) {
+    auto size = patches[i_patch].size();
+    auto [iter, rep] = data_map.emplace(i_patch, patch_datas{size, {}});
+    iter->second.data.reserve(frames_count * size);
+  }
   while (fin.peek() != decay_t<decltype(fin)>::traits_type::eof() &&
          !fin.eof()) {
     check(fin, integer_separator);
@@ -70,7 +73,6 @@ static inline fds_boundary_file read_frames(istream &fin,
       auto _size = info.size();
       CHECK_FORMAT(_size * sizeof(float) == patch_size);
       auto &data = data_map[ip].data;
-      data.reserve(data.size() + _size);
       for (size_t i = 0; i < info.size(); ++i) {
         float val = read_float(fin);
         data.push_back(val);
@@ -86,13 +88,16 @@ static inline fds_boundary_file read_frames(istream &fin,
 
 static inline fds_boundary_file
 read_frames_of_specified_patches(istream &fin, const vector<patch_info> patches,
-                                 const vector<u32> &patch_indices) {
+                                 const vector<u32> &patch_indices,
+                                 u32 frames_count) {
   fds_boundary_file frames;
 
   auto &data_map = frames.data;
   for (u32 i_patch : patch_indices) {
     assert(i_patch < patches.size());
-    data_map.emplace(i_patch, patch_datas{patches[i_patch].size(), {}});
+    auto sz = patches[i_patch].size();
+    auto [iter, rep] = data_map.emplace(i_patch, patch_datas{sz, {}});
+    iter->second.data.reserve(sz * frames_count);
   }
   // for (u32 i_patch = 0; i_patch < patches.size(); ++i_patch)
   while (fin.peek() != decay_t<decltype(fin)>::traits_type::eof() &&
@@ -108,7 +113,6 @@ read_frames_of_specified_patches(istream &fin, const vector<patch_info> patches,
       CHECK_FORMAT(_size * sizeof(float) == patch_size);
       if (data_map.find(ip) != data_map.cend()) {
         auto &data = data_map[ip].data;
-        data.reserve(data.size() + patch_size);
         for (size_t i = 0; i < _size; ++i) {
           float val = read_float(fin);
           data.push_back(val);
@@ -123,6 +127,19 @@ read_frames_of_specified_patches(istream &fin, const vector<patch_info> patches,
     frames.times.push_back(stime);
   }
   return frames;
+}
+
+static inline u32 calculate_frames_count(const vector<patch_info> &patches,
+                                         u32 file_size) {
+  u32 frame_bytes = 3;
+  for (auto &p : patches)
+    frame_bytes += p.size() + 2;
+  frame_bytes *= 4;
+  u32 header_bytes = (4U + 30U + 4U) * 3U + (3U + 11U * patches.size()) * 4U;
+  u32 remained_bytes = (file_size - header_bytes);
+  assert(remained_bytes % frame_bytes == 0);
+  u32 frames_count = remained_bytes / frame_bytes;
+  return frames_count;
 }
 
 /*
@@ -141,10 +158,13 @@ read_file_header_and_patches(istream &fin) {
  */
 static inline tuple<array<char, 30 + 1>, array<char, 30 + 1>,
                     array<char, 30 + 1>, vector<patch_info>, fds_boundary_file>
-read_file(istream &fin) {
+read_file(istream &fin, u32 file_size) {
   auto &&header = read_file_header(fin);
   auto &&patches = read_patches(fin);
-  auto &&frames = read_frames(fin, patches);
+
+  const auto frames_count = calculate_frames_count(patches, file_size);
+
+  auto &&frames = read_frames(fin, patches, frames_count);
   return std::tuple_cat(std::move(header),
                         std::make_tuple(std::move(patches), std::move(frames)));
 }
@@ -154,7 +174,7 @@ read_file(istream &fin) {
  */
 static inline tuple<array<char, 30 + 1>, array<char, 30 + 1>,
                     array<char, 30 + 1>, vector<patch_info>, fds_boundary_file>
-read_file_of_specified_patches(istream &fin) {
+read_file_of_specified_patches(istream &fin, u32 file_size) {
   auto &&header = read_file_header(fin);
   auto &&patches = read_patches(fin);
 
@@ -164,7 +184,10 @@ read_file_of_specified_patches(istream &fin) {
     if (index >= patches.size())
       clog << index << " is out of bound.\n";
 
-  auto &&frames = read_frames_of_specified_patches(fin, patches, indices);
+  const auto frames_count = calculate_frames_count(patches, file_size);
+
+  auto &&frames =
+      read_frames_of_specified_patches(fin, patches, indices, frames_count);
   return std::tuple_cat(std::move(header),
                         std::make_tuple(std::move(patches), std::move(frames)));
 }

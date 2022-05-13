@@ -2,28 +2,33 @@
 #include "elements_io.hpp"
 
 static inline void mesh_settings() {
-  cout << "C - Cell size:            " << mesh.cell_size << endl
-       << "X - Origin x:             " << mesh.x0 << endl
-       << "Y - Origin y:             " << mesh.y0 << endl
-       << "Z - Origin z:             " << mesh.z0 << endl;
-  char opt = 'd';
-  cin >> opt;
-  switch (opt) {
-  case 'C': {
-    cin >> mesh.cell_size;
-  } break;
-  case 'X': {
-    cin >> mesh.x0;
-  } break;
-  case 'Y': {
-    cin >> mesh.y0;
-  } break;
-  case 'Z': {
-    cin >> mesh.z0;
-  } break;
-  default:
-    COMMAND_NOT_FOUND;
-    break;
+  while (true) {
+    cout << "Options:\n"
+         << "C - Cell size:" << mesh.cell_size << "\n"
+         << "X - Origin x: " << mesh.x0 << "\n"
+         << "Y - Origin y: " << mesh.y0 << "\n"
+         << "Z - Origin z: " << mesh.z0 << "\n";
+    char opt = 'd';
+    cin >> opt;
+    switch (opt) {
+    case 'C': {
+      cin >> mesh.cell_size;
+    } break;
+    case 'X': {
+      cin >> mesh.x0;
+    } break;
+    case 'Y': {
+      cin >> mesh.y0;
+    } break;
+    case 'Z': {
+      cin >> mesh.z0;
+    } break;
+    case 'd':
+      return;
+    default:
+      COMMAND_NOT_FOUND;
+      break;
+    }
   }
 }
 
@@ -37,27 +42,150 @@ static inline void input_patch_indices(Callable &&callable, u32 max) {
   }
 }
 
-static inline void select_patches() {
-  while (true) {
-    cout << "T - Select some patches.\n"
-            "F - Unselect some patches.\n"
-            "R - Reverse selection of some patches.\n"
-            "d - discard.\n";
-    char opt = 'd';
-    switch (opt) {
-    case 'T':
-      break;
-    case 'F':
-      break;
-    case 'R':
-      break;
-    case 'd':
-      return;
-    default:
-      COMMAND_NOT_FOUND;
-      break;
+static inline void select_patches(const vector<patch_info> &patches) {
+  cout << "Options:\n"
+          "T - Select some patches.\n"
+          "F - Unselect some patches.\n"
+          "t - Select some patches only.\n"
+          "f - Unselect some patches only.\n"
+          "R - Reverse selection of some patches.\n"
+          "d - discard.\n";
+  char opt = 'd';
+  cin >> opt;
+  unselected_patches.resize(patches.size());
+  switch (opt) {
+  case 'T': {
+    auto vec = read_until<u32>(cin);
+    for (auto i : vec)
+      unselected_patches[i] = false;
+  } break;
+  case 'F': {
+    auto vec = read_until<u32>(cin);
+    for (auto i : vec)
+      unselected_patches[i] = true;
+  } break;
+  case 't': {
+    auto vec = read_until<u32>(cin);
+    for (auto &u : unselected_patches)
+      u = true;
+    for (auto i : vec)
+      unselected_patches[i] = false;
+  } break;
+  case 'f': {
+    auto vec = read_until<u32>(cin);
+    for (auto &u : unselected_patches)
+      u = false;
+    for (auto i : vec)
+      unselected_patches[i] = true;
+  } break;
+  case 'R': {
+    auto vec = read_until<u32>(cin);
+    for (auto i : vec)
+      unselected_patches[i] = !unselected_patches[i];
+  } break;
+  case 'd':
+    return;
+  default:
+    COMMAND_NOT_FOUND;
+    break;
+  }
+}
+
+static inline void write(const vector<patch_info> &all_patches,
+                         const fds_boundary_file &frames,
+                         const tuple<vector<float>, vector<u32>, vector<u32>,
+                                     vector<u32>, vector<u32>> &element_data,
+                         data_category dc) {
+  const auto patches = [&all_patches]() {
+    vector<patch_info> patches;
+    for (size_t i_patch = 0; i_patch < unselected_patches.size(); ++i_patch)
+      if (!unselected_patches[i_patch])
+        patches.push_back(all_patches[i_patch]);
+    return patches;
+  }();
+
+  auto &[nodes, element_sizes, element_indices, node_numbers, element_numbers] =
+      element_data;
+
+  auto opt1 =
+      request_file_by_name([](const path &p) { return true; }, "APDL output");
+  auto opt2 = request_file_by_name([](const path &p) { return true; },
+                                   "APDL output directory");
+  if (!opt1)
+    return;
+  auto out = ofstream(opt1.value());
+  if (!out) {
+    FILE_OPEN_FAILED;
+  }
+  if (!opt2)
+    return;
+  auto &dir = opt2.value();
+  if (!exists(dir)) {
+    auto suc = create_directory(dir);
+    if (!suc) {
+      DIRECTORY_CREATE_FAILED;
     }
   }
+  out << "/PREP7" << endl;
+
+  const auto N = frames.times.size();
+
+  auto [polygon_sizes, polygon_indices, _, polygon_node_numbers,
+        polygon_element_numbers, surface_numbers] =
+      get_polygon<true>(element_sizes, element_indices, node_numbers,
+                        element_numbers);
+
+  auto [on_boundary_vertex_sizes, on_boundary_vertex_indices,
+        node_numbers_on_boundary, element_numbers_on_boundary,
+        surface_numbers_on_boundary] =
+      polygon_on_boundary(patches, nodes, polygon_sizes, polygon_indices,
+                          polygon_node_numbers, polygon_element_numbers,
+                          surface_numbers);
+
+  auto [on_boundary_surface_numbers, _2, boundary_data] = polygon_average(
+      all_patches, nodes, surface_numbers_on_boundary, on_boundary_vertex_sizes,
+      on_boundary_vertex_indices, frames);
+
+  assert(on_boundary_surface_numbers.size() == on_boundary_vertex_sizes.size());
+
+  vector<vector<u32>::const_iterator> ps;
+  ps.reserve(on_boundary_surface_numbers.size() + 1);
+  vector<vector<float>::const_iterator> Ps;
+  Ps.reserve(on_boundary_surface_numbers.size() + 1);
+  {
+    auto p = on_boundary_vertex_indices.begin();
+    auto e = on_boundary_vertex_indices.end();
+    auto P = boundary_data.begin();
+    auto E = boundary_data.end();
+
+    for (auto sz : on_boundary_vertex_sizes) {
+      assert(p < e);
+      assert(P < E);
+      ps.push_back(p);
+      Ps.push_back(P);
+      p += sz;
+      P += N;
+    }
+    ps.push_back(p);
+    Ps.push_back(P);
+    assert(p == e);
+    assert(P == E);
+  }
+
+  auto [name, ratio] = map_quantity_type(dc);
+
+  assert(element_numbers_on_boundary.size() ==
+         on_boundary_surface_numbers.size());
+#pragma omp parallel for schedule(dynamic, 5000)
+  for (long i = 0; i < on_boundary_vertex_sizes.size(); ++i) {
+    write_table(out, opt2.value(), name, ratio, element_numbers_on_boundary[i],
+                on_boundary_surface_numbers[i], ps[i], ps[i + 1], frames, Ps[i],
+                Ps[i + 1]);
+  }
+  out << "FINISH" << endl
+      << "/SOLU" << endl
+      << "ALLSEL,ALL" << endl
+      << "/NERR,,99999999" << endl;
 }
 
 static inline void attach(const vector<patch_info> &patches,
@@ -207,7 +335,7 @@ d - Discard.
     case 'd':
       return;
     case 's':
-      select_patch(patches);
+      select_patches(patches);
       break;
     case 'p':
       visualize_patch(patches);
@@ -298,7 +426,7 @@ d - Discard.
       }
       break;
 #endif // GRAPHICS_ENABLED
-    case 'l':
+    case 'L':
       if (!patches.empty() && !frames_empty && elem_avail()) {
         auto opt1 = request_file_by_name([](const path &p) { return true; },
                                          "APDL output");
@@ -359,7 +487,7 @@ d - Discard.
         auto [name, ratio] = map_quantity_type(dc);
 
         assert(element_numbers.size() == on_boundary_surface_numbers.size());
-        //#pragma omp parallel for schedule(dynamic, 5000)
+#pragma omp parallel for schedule(dynamic, 5000)
         for (long i = 0; i < on_boundary_vertex_sizes.size(); ++i) {
           write_table(out, opt2.value(), name, ratio, element_numbers[i],
                       on_boundary_surface_numbers[i], ps[i], ps[i + 1], frames,
@@ -370,6 +498,9 @@ d - Discard.
             << "ALLSEL,ALL" << endl
             << "/NERR,,99999999" << endl;
       }
+      break;
+    case 'l':
+      write(patches, frames, element_data, dc);
       break;
     default:
       COMMAND_NOT_FOUND;
