@@ -16,8 +16,8 @@ using std::array;
 using std::bitset;
 using std::clog;
 using std::conditional_t;
+using std::equal;
 using std::invoke_result_t;
-using std::lexicographical_compare;
 using std::lroundf;
 using std::map;
 using std::max;
@@ -140,8 +140,7 @@ template <size_t len>
 constexpr static inline bool compare(const array<char, 30 + 1> &a,
                                      const char (&b)[len]) {
   static_assert(len < 30);
-  return lexicographical_compare(a.data(), a.data() + len + 1, b,
-                                 b + len + 1) == 0;
+  return equal(a.data(), a.data() + len + 1, b, b + len + 1) == 0;
 }
 
 static inline u32 selected_patch = 0;
