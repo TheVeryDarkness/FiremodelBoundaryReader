@@ -343,9 +343,6 @@ d - Discard.
     case 'P':
       visualize_patch_selection(patches);
       break;
-    case 'S':
-      mesh_settings();
-      break;
 #if GRAPHICS_ENABLED
     case 'y':
       if (selected_patch < patches.size() && elem_avail()) {

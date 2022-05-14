@@ -358,6 +358,7 @@ V - Visualize frame.)"
 
     if (elem_available())
       cout << R"(
+s - Mesh settings.
 R - Visualize elements.
 Y - Visualize elements polygons.)";
 
@@ -440,6 +441,12 @@ A - Attach patch data.)";
         goto CMDNF;
       break;
 #endif // GRAPHICS_ENABLED
+    case 's':
+      if (elem_available()) {
+        mesh_settings();
+      } else
+        goto CMDNF;
+      break;
     case 'b': {
       print_header(cout.original(), label, bar_label, units);
     } break;
