@@ -536,6 +536,6 @@ map_quantity_type(data_category category) {
     return {"HFLUX", 1000};
   case data_category::other:
   default:
-    throw exception();
+    throw data_category_error();
   }
 }

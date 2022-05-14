@@ -140,7 +140,7 @@ template <size_t len>
 constexpr static inline bool compare(const array<char, 30 + 1> &a,
                                      const char (&b)[len]) {
   static_assert(len < 30);
-  return equal(a.data(), a.data() + len + 1, b, b + len + 1) == 0;
+  return equal(a.data(), a.data() + len + 1, b, b + len + 1);
 }
 
 static inline u32 selected_patch = 0;
@@ -150,9 +150,9 @@ constexpr static inline data_category
 get_data_category(const array<char, 30 + 1> &units) {
   if (compare(units, "C")) {
     return data_category::temperature;
-  } else if (compare(units, "kW/m2"))
+  } else if (compare(units, "kW/m2")) {
     return data_category::heat_flux;
-  else
+  } else
     return data_category::other;
 }
 

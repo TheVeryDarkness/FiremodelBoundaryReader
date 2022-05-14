@@ -20,6 +20,11 @@ template <size_t sz> static inline void read(istream &in, array<char, sz> &s) {
   CHECK_STREAM(in);
   static_assert(sz > 0);
   in.get(s.data(), sz);
+  for (auto rp = s.rbegin() + 1, rend = s.rend(); rp != rend; ++rp)
+    if (*rp == ' ')
+      *rp = 0;
+    else
+      break;
 }
 
 // Actually I'm not sure about their meanings.

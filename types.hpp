@@ -15,6 +15,10 @@ public:
            "unexpected EOF.";
   }
 };
+class data_category_error : public std::exception {
+public:
+  const char *what() const noexcept { return "Data can't be used to write."; }
+};
 
 #define CHECK_STREAM(STREAM)                                                   \
   if (!(STREAM))                                                               \
