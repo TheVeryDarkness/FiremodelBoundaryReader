@@ -103,6 +103,10 @@ struct patch_info {
     }
   }
 
+  constexpr bool contains(u32 i, u32 j, u32 k) const noexcept {
+    return (I1 <= i && i <= I2) && (J1 <= j && j <= J2) && (K1 <= k && k <= K2);
+  }
+
   template <size_t sz> pair<u32, u32> border() const noexcept {
     switch (sz) {
     case 0:

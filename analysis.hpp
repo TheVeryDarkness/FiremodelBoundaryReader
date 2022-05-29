@@ -28,6 +28,7 @@ using std::set;
 using std::setprecision;
 using std::stack;
 using std::stringstream;
+using std::swap;
 using std::tuple;
 using std::filesystem::create_directory;
 using std::filesystem::exists;
@@ -133,8 +134,10 @@ static inline void apply_function(vector<float> &data) {
     cout << setw(8) << name << " - " << desc << '\n';
   }
   auto iter = f_map.find(func);
-  if (iter == f_map.end())
+  if (iter == f_map.end()) {
+    cerr << "Function not found.\n";
     return;
+  }
   auto &[name, tup] = *iter;
   auto &[desc, f, pred] = tup;
   if (pred && !disableDataCheck) {
@@ -315,6 +318,37 @@ static inline vector<float> sample(const vector<float> &data,
   return new_result;
 }
 
+static inline vector<float> join(const vector<float> &a, const vector<float> &b,
+                                 const vector<u32> &sz_a,
+                                 const vector<u32> &sz_b, size_t dimension) {
+
+  const u32 m_a = sz_a[dimension], n = array_stride(sz_a, dimension + 1),
+            m_b = sz_a[dimension];
+  assert(n == array_stride(sz_b, dimension + 1));
+  const u32 l = a.size() / m_a / n;
+  assert(l == b.size() / m_b / n);
+
+  vector<float> new_result;
+  new_result.resize(a.size() + b.size());
+
+  const u32 m = m_a + m_b;
+
+  // Will this be optimized well?
+  for (size_t i = 0; i < l; ++i) {
+    for (size_t k = 0; k < n; ++k) {
+      for (size_t _j = 0; _j < m_a; ++_j) {
+        new_result[i * m * n + _j * n + k] = a[i * m_a * n + _j * n + k];
+      }
+      for (size_t _j = 0; _j < m_b; ++_j) {
+        new_result[i * m * n + (m_a + _j) * n + k] =
+            b[i * m_b * n + _j * n + k];
+      }
+    }
+  }
+
+  return new_result;
+}
+
 static inline void select_patch(const vector<patch_info> &patches) {
   u32 p = 0;
   cout << "Select a patch to analyze. Input an invalid index to discard."
@@ -326,6 +360,65 @@ static inline void select_patch(const vector<patch_info> &patches) {
     return;
   }
   selected_patch = p;
+}
+
+static inline void exchange(vector<float> &data, vector<u32> &sizes, u32 dim1,
+                            u32 dim2) {
+  if (dim1 > dim2)
+    swap(dim1, dim2);
+  const u32 dim = sizes.size();
+  if (dim1 >= dim || dim2 >= dim) {
+    cerr << "Dimension invalid.\n";
+    return;
+  }
+  if (dim1 == dim2) {
+    cerr << "Same dimension cannot be exchanged.\n";
+    return;
+  }
+
+  const auto p = array_stride(sizes, dim2 + 1);
+  const auto o = sizes[dim2];
+  const auto n = array_stride(sizes, dim1 + 1) / p;
+  assert(array_stride(sizes, dim1 + 1) % p == 0);
+  const auto m = sizes[dim1];
+  const auto l = array_stride(sizes, 0) / m;
+  assert(array_stride(sizes, 0) % m == 0);
+
+  vector<float> new_result;
+  new_result.reserve(data.size());
+
+  for (u32 _l = 0; _l < l; ++_l)
+    for (u32 _o = 0; _o < o; ++_o)
+      for (u32 _n = 0; _n < n; ++_n)
+        for (u32 _m = 0; _m < m; ++_m)
+          for (u32 _p = 0; _p < p; ++_p) {
+            const auto index1 =
+                _l * o * n * m * p + _o * n * m * p + _n * m * p + _m * p + _p;
+            const auto index2 =
+                _l * m * n * o * p + _m * n * o * p + _n * o * p + _o * p + _p;
+            assert(new_result.size() == index1);
+            new_result.push_back(data[index2]);
+          }
+}
+
+static inline void locate_patch(const vector<patch_info> &patches) {
+  u32 x = 0, y = 0, z = 0;
+  cout << "Input a point to locate the patch." << endl;
+
+  cout << "Position (x y z): ";
+  cin >> x >> y >> z;
+  bool found = false;
+  for (u32 p = 0; p < patches.size(); ++p)
+    if (patches[p].contains(x, y, z)) {
+      selected_patch = p;
+      if (found)
+        clog << "Patch not unique.\n";
+      found = true;
+    }
+  if (found)
+    clog << selected_patch << " is selected.\n";
+  else
+    clog << "Not found, selected patch not changed.\n";
 }
 
 static inline void interlop(vector<float> &a, const vector<float> &b, float wa,
@@ -361,6 +454,7 @@ w - Input in console to overlap current result.
       cout <<
           R"(
 y - Apply math functions to all cells in current result.
+e - Extend current result's dimension by inserting a 1 to its shape.
 l - Flatten current result to specified dimension.
 a - Calculate average on specified dimension of current result.
 b - Calculate border of current result.
@@ -372,6 +466,8 @@ N - Replace inf with specified value.
 S - Sample.
 c - Read CSV file as current result.
 t - Get frame at a time. May interlop between two frame.
+T - Restore frame times as current result.
+R - Exchange 2 dimensions.
 - - Pop.)";
 
     if (data_and_size.size() >= 2) {
@@ -383,8 +479,8 @@ L - Interlop.)";
 
     if (!patches.empty())
       cout << R"(
-s - Select a patch.
-M - Visualize merged patches.)";
+s - Select a patch by index.
+r - Select a patch by position.)";
 
     if (!frames_empty && selected_patch < patches.size())
       cout <<
@@ -414,7 +510,10 @@ d - Discard.
       data_and_size.push_back({});
       break;
     case '-':
-      data_and_size.pop_back();
+      if (!data_and_size.empty())
+        data_and_size.pop_back();
+      else
+        goto CMDNF;
       break;
     case 'n':
       if (!data_and_size.empty()) {
@@ -428,7 +527,8 @@ d - Discard.
           }
         if (i > 0)
           clog << "Replaced " << i << " nan with " << val << '\n';
-      }
+      } else
+        goto CMDNF;
       break;
     case 'N':
       if (!data_and_size.empty()) {
@@ -442,7 +542,8 @@ d - Discard.
           }
         if (i > 0)
           clog << "Replaced " << i << " inf with " << val << '\n';
-      }
+      } else
+        goto CMDNF;
       break;
     case 'z':
       if (!data_and_size.empty()) {
@@ -454,7 +555,8 @@ d - Discard.
         clog << "Found " << i
              << " subnormal float-point numbers. This typically means some "
                 "errors.\n";
-      }
+      } else
+        goto CMDNF;
       break;
     case 's':
       select_patch(patches);
@@ -483,7 +585,8 @@ d - Discard.
           cin >> e;
           data.push_back(e);
         }
-      }
+      } else
+        goto CMDNF;
       break;
     case 'm':
       if (!data_and_size.empty()) {
@@ -500,6 +603,8 @@ d - Discard.
             out << '*' << *begin;
           out << '\n';
         }
+      } else {
+        clog << "Result stack empty.\n";
       }
       break;
     case 'p':
@@ -511,7 +616,8 @@ d - Discard.
         auto [m, n] = get_matrix_size(sizes);
         if (n != 0)
           print_patch(data, m, n);
-      }
+      } else
+        goto CMDNF;
       break;
     case 'P': {
       u16 precision = input_precision<false>();
@@ -539,7 +645,8 @@ d - Discard.
         data = sample(data, sizes, dimension, pos);
         sizes[dimension] = (u32)pos.size();
       SKIP:;
-      }
+      } else
+        goto CMDNF;
       break;
 #if GRAPHICS_ENABLED
     case 'v':
@@ -549,7 +656,8 @@ d - Discard.
         if (!n)
           break;
         visualize_data(data, m, n);
-      }
+      } else
+        goto CMDNF;
       break;
 #endif // GRAPHICS_ENABLED
     case 'B':
@@ -564,27 +672,28 @@ d - Discard.
           break;
         }
         save_patch_as_binary(data, sizes, fout);
-      }
+      } else
+        goto CMDNF;
       break;
-    case 'c':
-      if (!data_and_size.empty()) {
-        auto &[data, sizes] = data_and_size.back();
-        auto opt = request_file_by_name(
-            [](const path &p) { return is_directory(p); }, "csv file");
-        if (opt.has_value()) {
-          auto &path = opt.value();
-          ifstream fin = ifstream(path);
-          if (!fin) {
-            FILE_OPEN_FAILED;
-            break;
-          }
-
-          auto [_data, _m, _n] = from_csv(fin);
-          data = std::move(_data);
-          sizes = {_m, _n};
+    case 'c': {
+      auto pair = make_pair(vector<float>{}, vector<u32>{});
+      auto &[data, sizes] = pair;
+      auto opt = request_file_by_name(
+          [](const path &p) { return is_directory(p); }, "csv file");
+      if (opt.has_value()) {
+        auto &path = opt.value();
+        ifstream fin = ifstream(path);
+        if (!fin) {
+          FILE_OPEN_FAILED;
+          break;
         }
+
+        auto [_data, _m, _n] = from_csv(fin);
+        data = std::move(_data);
+        sizes = {_m, _n};
+        data_and_size.push_back(std::move(pair));
       }
-      break;
+    } break;
     case 'C':
       if (!data_and_size.empty()) {
         auto &[data, sizes] = data_and_size.back();
@@ -604,13 +713,28 @@ d - Discard.
 
         auto [m, n] = get_matrix_size(sizes);
         save_patch_as_csv_text(data, m, n, fout);
-      }
+      } else
+        goto CMDNF;
+      break;
+    case 'e':
+      if (!data_and_size.empty()) {
+        u32 d = numeric_limits<u32>::max();
+        cin >> d;
+        auto &size = data_and_size.back().second;
+        if (d > size.size()) {
+          cerr << "Dimension invalid.\n";
+          break;
+        }
+        size.insert(size.cbegin() + d, 1);
+      } else
+        goto CMDNF;
       break;
     case 'y':
       if (!data_and_size.empty()) {
         auto &[data, sizes] = data_and_size.back();
         apply_function(data);
-      }
+      } else
+        goto CMDNF;
       break;
     case 'l':
       if (!data_and_size.empty()) {
@@ -621,7 +745,8 @@ d - Discard.
         if (sizes.size() > d)
           cerr << "Flattening failed. Current dimension is " << sizes.size()
                << ".\n";
-      }
+      } else
+        goto CMDNF;
       break;
     case 'a':
       if (!data_and_size.empty()) {
@@ -635,14 +760,21 @@ d - Discard.
         }
         data = average(data, sizes, dimension);
         sizes.erase(sizes.cbegin() + dimension);
-      }
+      } else
+        goto CMDNF;
       break;
     case 'b':
       if (!data_and_size.empty()) {
         const auto &[data, size] = data_and_size.back();
         auto [pmin, pmax] = minmax_element(data.begin(), data.end());
         clog << "Range: " << *pmin << " - " << *pmax << '\n';
-      }
+      } else
+        goto CMDNF;
+      break;
+    case 'r':
+      locate_patch(patches);
+      break;
+    case 'R':
       break;
     case 'L':
       if (data_and_size.size() >= 2) {
@@ -658,7 +790,8 @@ d - Discard.
         } else {
           cerr << "Size not matched.\n";
         }
-      }
+      } else
+        goto CMDNF;
       break;
     case 't':
       if (!frames_empty && selected_patch < patches.size()) {
@@ -696,7 +829,47 @@ d - Discard.
                             vector<u32>{patch.K(), patch.J(), patch.I()}));
               break;
             }
-      }
+      } else
+        goto CMDNF;
+      break;
+    case 'T':
+      if (!frames_empty) {
+        auto item = make_pair(vector<float>{}, vector<u32>{});
+        auto &[data, sizes] = item;
+        sizes = {(u32)frames.times.size()};
+        data.reserve(array_stride(sizes, 0));
+        data = frames.times;
+        data_and_size.push_back(std::move(item));
+      } else
+        goto CMDNF;
+      break;
+    case 'j':
+      if (data_and_size.size() >= 2) {
+        auto &a1 = *(data_and_size.crbegin() + 1);
+        auto &a2 = *(data_and_size.crbegin());
+        auto &s1 = a1.second;
+        auto &s2 = a2.second;
+        if (s1.size() != s2.size()) {
+          cerr << "Dimension not matched\n";
+          break;
+        }
+        u32 dim = numeric_limits<u32>::max();
+        cin >> dim;
+        for (size_t i = 0; i < s1.size(); ++i)
+          if (i != dim)
+            if (s1[i] != s2[i]) {
+              cerr << "Shape not matched\n";
+              break;
+            }
+        const u32 m = s1[dim] + s2[dim];
+        auto res = join(a1.first, a2.first, a1.second, a2.second, dim);
+        data_and_size.pop_back();
+        data_and_size.back().first = std::move(res);
+        data_and_size.back().second[dim] = m;
+        assert(data_and_size.back().first.size() ==
+               array_stride(data_and_size.back().second, 0));
+      } else
+        goto CMDNF;
       break;
     case 'f':
       if (!frames_empty && selected_patch < patches.size()) {
@@ -718,7 +891,8 @@ d - Discard.
                     patch_data.begin() + patch_size * (f + 1));
         sizes = {patch.K(), patch.J(), patch.I()};
         data_and_size.push_back(std::move(item));
-      }
+      } else
+        goto CMDNF;
       break;
     case 'F':
       if (!frames_empty && selected_patch < patches.size()) {
@@ -729,9 +903,11 @@ d - Discard.
         data.reserve(array_stride(sizes, 0));
         data = frames.data.at(selected_patch).data;
         data_and_size.push_back(std::move(item));
-      }
+      } else
+        goto CMDNF;
       break;
     default:
+    CMDNF:
       COMMAND_NOT_FOUND;
       break;
     }

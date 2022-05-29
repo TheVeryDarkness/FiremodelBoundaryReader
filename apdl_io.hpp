@@ -86,6 +86,8 @@ read_mapdl(istream &in) {
   auto &[nodes, size_and_element, node_numbers, element_numbers] = res;
   auto &[vertex_count, elements] = size_and_element;
 
+  vector<u32> node_number_back_map; // Node number to node index.
+
   constexpr auto &start = "/wb,contact,start";
   constexpr auto &end = "/wb,contact,end";
 
@@ -128,14 +130,18 @@ read_mapdl(istream &in) {
           assert(in);
           in >> index;
 
-          if constexpr (readNodeNumbers)
+          if constexpr (readNodeNumbers) {
+            if (node_number_back_map.size() < index)
+              node_number_back_map.resize(index, numeric_limits<u32>::max());
+            node_number_back_map[index - 1] = node_numbers.size();
             node_numbers.push_back(index);
+          }
 
           for (auto &c : coordinates) {
             assert(in);
             in >> c;
           }
-          coordinates[2] = -coordinates[2];
+          // coordinates[2] = -coordinates[2];
           for (auto &c : coordinates)
             nodes.push_back(c);
         }
@@ -161,7 +167,14 @@ read_mapdl(istream &in) {
                                : read_element_in_apdl<5, false, 0, 0>(
                                      in, (u32)vertex_count.size());
           for (auto n : indices)
-            elements.push_back(n);
+            if constexpr (readNodeNumbers) {
+              auto index = node_number_back_map[n];
+              assert(index != numeric_limits<u32>::max());
+              if (index == numeric_limits<u32>::max())
+                cerr << n + 1 << " is not number of a defined node.\n";
+              elements.push_back(index);
+            } else
+              elements.push_back(n);
           vertex_count.push_back(size);
           if constexpr (readElementNumbers)
             element_numbers.push_back(number);

@@ -208,13 +208,13 @@ a - ANSYS mapdl file.
 static inline tuple<vector<float>, vector<u32>, vector<u32>, vector<u32>,
                     vector<u32>>
 read_nodes_and_elements() {
-  char opt0 = 'd';
+  char opt = 'd';
   cout << R"(
 s - Standard format.
 a - ANSYS mapdl file.
 )";
-  cin >> opt0;
-  switch (opt0) {
+  cin >> opt;
+  switch (opt) {
   case 's': {
     auto opt_nodes =
         request_file_by_name([](const path &p) { return exists(p); }, "nodes");
@@ -305,7 +305,7 @@ a - ANSYS mapdl file.
             move(element_numbers)};
   }
   default:
-    COMMAND_NOT_FOUND_OPT(opt0);
+    COMMAND_NOT_FOUND;
   case 'd':
     return {};
   }

@@ -27,9 +27,18 @@ static class stdin_proxy {
     bool res = pos == std::ios::pos_type(-1) || pos == size;
     return res;
   }
+  void check() {
+    /*
+    if (sin.fail())
+      cerr << "Error detected during executing script.\n";
+    mode = !string_empty();
+  */
+  }
 
 public:
   template <typename Any> stdin_proxy &operator>>(Any &&any) {
+    check();
+
     sin >> std::ws;
     if (string_empty()) {
       std::cin >> std::forward<Any>(any);
@@ -40,8 +49,12 @@ public:
     mode = !string_empty();
     return *this;
   }
-  void endl() { sin << std::endl; }
+  void endl() {
+    check();
+    sin << std::endl;
+  }
   void ws() {
+    check();
     sin >> std::ws;
     if (string_empty())
       std::cin >> std::ws;

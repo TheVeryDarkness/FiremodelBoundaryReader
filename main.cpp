@@ -442,7 +442,7 @@ A - Attach patch data.)";
       break;
 #endif // GRAPHICS_ENABLED
     case 's':
-      if (elem_available()) {
+      if (!patches.empty()) {
         mesh_settings();
       } else
         goto CMDNF;

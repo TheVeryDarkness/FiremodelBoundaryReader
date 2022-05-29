@@ -104,6 +104,11 @@ static inline void write(const vector<patch_info> &all_patches,
     return patches;
   }();
 
+  if (patches.empty()) {
+    cerr << "No patches selected.\n";
+    return;
+  }
+
   auto &[nodes, element_sizes, element_indices, node_numbers, element_numbers] =
       element_data;
 
