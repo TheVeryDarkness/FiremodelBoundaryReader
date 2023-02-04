@@ -402,5 +402,8 @@ cmakePresets.json
 cmakeUserPresets.json 
 build/*
 
-#VSCode
+# VSCode
 .vscode/**
+
+# Zip
+*.zip
