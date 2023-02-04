@@ -84,6 +84,8 @@ struct subset_start_from<0, first, res...> {
 template <size_t i, typename... types>
 using subset_start_from_t = typename subset_start_from<i, types...>::type;
 
+static inline GLfloat bgColor[] = {.0f, .0f, .0f, 1.f};
+
 static inline glm::vec3 cameraPos = glm::vec3(-1.0f, 0.0f, 0.0f);
 static inline glm::vec3 cameraFront = glm::vec3(1.0f, 0.0f, 0.0f);
 static inline glm::vec3 cameraUp = glm::vec3(0.0f, 0.0f, 1.0f);
@@ -410,6 +412,8 @@ static inline bool visualization_settings() {
          << "F - Fullscreen:           " << fullScreen << endl
          << "W - Window width:         " << windowWidth << endl
          << "H - Window height:        " << windowHeight << endl
+         << "b - Background color:     " << bgColor[0] << ' ' << bgColor[1]
+         << ' ' << bgColor[2] << ' ' << bgColor[3] << endl
          << "Options:" << endl
          << "h - Show graphics help." << endl
          << "g - Start patch visualiztion." << endl
@@ -448,6 +452,10 @@ static inline bool visualization_settings() {
     case 'k': {
       cout << "Key move sensity: ";
       cin >> key_move_sensity;
+    } break;
+    case 'b': {
+      cout << "Color in RGBA: ";
+      cin >> bgColor[0] >> bgColor[1] >> bgColor[2] >> bgColor[3];
     } break;
     case 'h': {
       cout << R"(
@@ -735,7 +743,7 @@ static inline int visualize(GetData &&getData,
 
     DETECT_ERROR;
 
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClearColor(bgColor[0], bgColor[1], bgColor[2], bgColor[3]);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     glUseProgram(shaderProgram);
